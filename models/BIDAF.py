@@ -4,29 +4,56 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
+class Embedding(nn.Module):
+    def __init__(self, glove_vectors, char_vectors, embed_size, hidden_size, drop_prob):
+        super(Embedding, self).__init__()
+        assert glove_vectors.size(1) == embed_size, 'pretrained wording embedding size conflicts with designated embedding size.'
+        self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
+        self.cembed = nn.Embedding.from_pretrained(char_vectors, freeze=False)
+        self.proj =
+
+
 class Encoder(nn.Module):
-    def __init__(self, embed_size, hidden_size, num_char, vocab,
-                 dropout,drop_highway=0.3, bidirectional=True):
+    def __init__(self, embed_size, hidden_size, num_char, max_char_length,
+                 vocab, dropout, drop_highway=0.3, bidirectional=True):
         super(Encoder, self).__init__()
         padding_idx = vocab['<pad>']
         vocab_size = len(vocab.keys())
         self.embeddings = nn.Embedding(vocab_size, embed_size, padding_idx=padding_idx)
-        self.charcnn = CharCNN(num_char, embed_size)
-        self.highway = Highway(embed_size, drop_highway)
+        self.charcnn = CharCNN(num_char, embed_size, max_char_length)
+        self.highway = Highway(embed_size*2, drop_highway)
         self.encoder = nn.LSTM(embed_size, hidden_size,bidirectional=bidirectional)
+        # self.projection = nn.Linear(hidden_size*2, hidden_size)  # here out dim is hidden_size ????
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, input_char_tensor, input_token_tensor, seq_lengths):
+
+        """
+        :param input_char_tensor:
+        :param input_token_tensor: shape = (seq_length, batch_size)
+        :param seq_lengths:
+        :return:
+        """
+
         embed1 = self.embeddings(input_token_tensor)
         embed2 = self.charcnn(input_char_tensor)
+        embed = torch.concat([embed1, embed2], dim=-1)
 
-        embed = torch.concat(embed1, embed2, )
+        out = self.highway(embed)
+        out = pack_padded_sequence(out, seq_lengths)
+        hiddens, (last_hidden, last_cell) = self.encoder(out)
+        hiddens = pad_packed_sequence(hiddens, batch_first=True, total_length=input_token_tensor.size(0))
+        hiddens = hiddens[0]
 
-        return out
+        return hiddens
 
 
 class Decoder(nn.Module):
-    pass
+    def __init__(self):
+        super(Decoder, self).__init__()
+
+    def forward(self):
+        pass
 
 
 class CharCNN(nn.Module):
@@ -63,12 +90,33 @@ class Highway(nn.Module):
         return out
 
 
-class BiDAF(nn.Module):
-    def __init__(self, embed_size, hidden_size, num_char, vocab,
-                 bidirectional=True ):
+class Attention(nn.Module):
+    def __init__(self):
+        super(Attention, self).__init__()
+
+    def forward(self, inputs, attention_mask):
         pass
 
-    def forward(self):
+
+class idontknow(nn.Module):
+    pass
+
+
+class BiDAF(nn.Module):
+    def __init__(self, embed_size, hidden_size, num_char, vocab,
+                 bidirectional=True):
+        self.context_encoder = Encoder()
+        self.query_encoder = Encoder()
+        pass
+
+    def generate_sent_masks(self, encodings, seq_lengths):
+        masks = torch.zeros(encodings.size(0), encodings.size(1), dtype=torch.float)
+        for i, idx in enumerate(seq_lengths):
+            masks[i, idx:] = 1
+        # print(masks.device)
+        # 这里是否需要转移mask到device上面?????
+
+    def forward(self, input_context, input_query, input_context_chars, input_query_chars):
         pass
 
 
