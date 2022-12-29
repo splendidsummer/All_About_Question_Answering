@@ -4,58 +4,6 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
-class Embedding(nn.Module):
-    def __init__(self, glove_vectors, char_vectors, embed_size, hidden_size, drop_prob):
-        super(Embedding, self).__init__()
-        assert glove_vectors.size(1) == embed_size, 'pretrained wording embedding size conflicts with designated embedding size.'
-        self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
-        self.cembed = nn.Embedding.from_pretrained(char_vectors, freeze=False)
-        self.proj =
-
-
-class Encoder(nn.Module):
-    def __init__(self, embed_size, hidden_size, num_char, max_char_length,
-                 vocab, dropout, drop_highway=0.3, bidirectional=True):
-        super(Encoder, self).__init__()
-        padding_idx = vocab['<pad>']
-        vocab_size = len(vocab.keys())
-        self.embeddings = nn.Embedding(vocab_size, embed_size, padding_idx=padding_idx)
-        self.charcnn = CharCNN(num_char, embed_size, max_char_length)
-        self.highway = Highway(embed_size*2, drop_highway)
-        self.encoder = nn.LSTM(embed_size, hidden_size,bidirectional=bidirectional)
-        # self.projection = nn.Linear(hidden_size*2, hidden_size)  # here out dim is hidden_size ????
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, input_char_tensor, input_token_tensor, seq_lengths):
-
-        """
-        :param input_char_tensor:
-        :param input_token_tensor: shape = (seq_length, batch_size)
-        :param seq_lengths:
-        :return:
-        """
-
-        embed1 = self.embeddings(input_token_tensor)
-        embed2 = self.charcnn(input_char_tensor)
-        embed = torch.concat([embed1, embed2], dim=-1)
-
-        out = self.highway(embed)
-        out = pack_padded_sequence(out, seq_lengths)
-        hiddens, (last_hidden, last_cell) = self.encoder(out)
-        hiddens = pad_packed_sequence(hiddens, batch_first=True, total_length=input_token_tensor.size(0))
-        hiddens = hiddens[0]
-
-        return hiddens
-
-
-class Decoder(nn.Module):
-    def __init__(self):
-        super(Decoder, self).__init__()
-
-    def forward(self):
-        pass
-
-
 class CharCNN(nn.Module):
     def __init__(self, in_ch, out_ch, max_char_length, kernel_size=5):
         super(CharCNN, self).__init__()
@@ -74,40 +22,187 @@ class CharCNN(nn.Module):
 
 
 class Highway(nn.Module):
-    def __init__(self, embed_size, drop_prob):
+    def __init__(self, num_layers, embed_size):
         super(Highway, self).__init__()
-        self.linear1 = nn.Linear(embed_size, embed_size)
-        self.linear2 = nn.Linear(embed_size, embed_size)
-        self.sigmoid = nn.Sigmoid()
-        self.dropout = nn.Dropout(drop_prob)
+        self.transformers = nn.ModuleList([nn.Linear(embed_size, embed_size) for _ in range(num_layers)])
+        self.gates = nn.ModuleList([nn.Linear(embed_size, embed_size) for _ in range(num_layers)])
 
     def forward(self, inputs):
-        out = self.linear1(inputs).clip(min=0)
-        out = self.linear2(out)
-        gate = self.sigmoid(out)
-        out = out * gate  + (1-gate) * inputs
-        out = self.dropout(out)
-        return out
+        for gate, transform in zip(self.gates, self.transformers):
+            transform_input = F.relu(transform(inputs))
+            gate_value = torch.sigmoid(gate(inputs))
+            inputs = inputs * (1 - gate_value) + gate_value * transform_input
+
+        return inputs
+
+
+class Embedding(nn.Module):
+    def __init__(self, glove_vectors, char_vectors,
+                 char_embed_size, embed_size, hidden_size, max_word_length,
+                 drop_prob):
+
+        super(Embedding, self).__init__()
+        assert glove_vectors.size(1) == embed_size, 'pretrained wording embedding size' \
+                                                    ' conflicts with designated embedding size.'
+
+        self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
+        self.cembed = nn.Embedding.from_pretrained(char_vectors, freeze=False)
+        self.proj = nn.Linear(embed_size, hidden_size, bias=False)
+        self.cnn = CharCNN(char_embed_size, embed_size, max_word_length)
+        self.dropout = nn.Dropout(drop_prob)
+        self.highway = Highway(2, embed_size)  # using 2 highway layers
+
+    def forward(self, word_tensors, char_tensors):
+
+        word_embed = self.wembed(word_tensors)
+        word_embed = self.dropout(word_embed)
+
+        char_embed = self.cembed(char_tensors)
+        char_embed = self.cnn(char_embed)
+
+        embed = torch.concat([word_embed, char_embed], dim=-1)
+        embed = self.highway(embed)
+
+        return embed
+
+
+class Encoder(nn.Module):
+    def __init__(self, embed_size, hidden_size, drop_rate):
+        """
+        :param input_size:
+        :param hidden_size:
+        :param drop_rate: if more than 1 layer of LSTM, we may need dropout
+        :param bidirectional:
+        """
+        super(Encoder, self).__init__()
+        self.encoder = nn.LSTM(embed_size, hidden_size, batch_first=True, bidirectional=True)
+        self.dropout = nn.Dropout(drop_rate)
+
+    def forward(self, inputs, seq_lengths):
+        """
+        :param inputs: should be sorted sequence list w.r.t. corresponding length
+        :param seq_lengths: length w.r.t. element of inputs
+        :return:
+        """
+
+        total_len = inputs.size(1)
+        out = pack_padded_sequence(inputs, seq_lengths)
+        hiddens, _ = self.encoder(out)
+        hiddens = pad_packed_sequence(hiddens, batch_first=True, total_length=total_len)
+        hiddens = self.dropout(hiddens)
+
+        return hiddens
 
 
 class Attention(nn.Module):
-    def __init__(self):
+    def __init__(self, hidden_size, drop_rate):
         super(Attention, self).__init__()
+        self.attention = nn.Linear(hidden_size*3, 1)
+        self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, inputs, attention_mask):
-        pass
+    def forward(self, context, context_mask, query, query_mask):
+        context = self.dropout(context)
+        query = self.dropout(query)
+
+        batch_size, context_len, query_len = context.size(0), context.size(1), query.size(1)
+
+        context_ = context.unsequeeze(2).repeat(1, 1, query_len, 1)
+        query_ = query.unsequeeze(1).repeat(1, context_len, 1, 1)
+
+        elementwise_prod = torch.mul(context_, query_)
+
+        # [bs, context_len, query_len, 6*hidden_size]
+        cq = torch.cat([context_, query_, elementwise_prod], dim=-1)
+
+        # sim_matrix.shape = [bs, context_len, query_len]
+        sim_matrix = self.attention(cq).view(-1, context_len, query_len)
+        alpha = F.softmax(sim_matrix, dim=-1)
+
+        # [bs, context_len, query_len] * [bs, query_len, embed_size] ->
+        # [bs, context_len, embed_size]
+        a = torch.bmm(alpha, query)
+        q2c_sim_mat = torch.max(sim_matrix, dim=-1)  # maybe there is a problem??
+        # beta.shape = [bs, 1, context_len]
+        beta = F.softmax(q2c_sim_mat, dim=-1).unsqueeze(1)
+        b = torch.bmm(beta, context).repeat(1, context_len, 1)
+
+        global_hidden = torch.concat([context, a, torch.mul(context, a), torch.mul(context, b)])
+
+        return global_hidden
 
 
-class idontknow(nn.Module):
-    pass
+class ModelingLayer(nn.Module):
+    def __init__(self, hidden_size, drop_rate):
+        super(ModelingLayer, self).__init__()
+        self.rnn = nn.LSTM(hidden_size*8, hidden_size, num_layers=2, batch_first=True,
+                           bidirectional=True, dropout=drop_rate)
+
+    def forward(self, inputs):
+        out, _ = self.rnn(inputs)
+        return out
+
+
+class Output(nn.Module):
+    def __init__(self, hidden_size, drop_rate):
+        super(Output, self).__init__()
+        self.output_start = nn.Linear(hidden_size*10, 1, bias=False)
+        self.output_end = nn.Linear(hidden_size*10, 1, bias=False)
+        self.end_lstm = nn.LSTM(hidden_size*2, hidden_size, bidirectional=True, batch_first=True)
+
+    def forward(self, global_hidden, modeling_out):
+        # Here the inputs are actually come from outputs of modeling layer
+        # Since bidirectional=True, out shape == [bs, context_len, hidden_size*2]
+        out, _ = self.end_lstm(global_hidden)
+        start_pos = self.output_start(torch.cat([global_hidden, modeling_out], dim=-1)).squeeze()
+        end_pos = self.output_end(torch.cat([global_hidden, out], dim=-1)).squeeze()
+
+        return start_pos, end_pos
+
+
+#############################################################
+# components of BIDAF
+# 1. Build embedding, load/initialize pretrained weights
+# 2. Build context encoder,
+#############################################################
 
 
 class BiDAF(nn.Module):
-    def __init__(self, embed_size, hidden_size, num_char, vocab,
+    def __init__(self, glove_vectors, char_vectors, embed_size, char_embed_size,
+                 hidden_size, vocab_size, max_word_length, drop_rate,
                  bidirectional=True):
-        self.context_encoder = Encoder()
-        self.query_encoder = Encoder()
-        pass
+
+        super(BiDAF, self).__init__()
+
+        self.context_embeddings = Embedding(glove_vectors, char_vectors, char_embed_size,
+                                    embed_size, hidden_size, max_word_length, drop_rate)
+        self.query_embeddings = Embedding(glove_vectors, char_vectors, char_embed_size,
+                                    embed_size, hidden_size, max_word_length, drop_rate)
+
+        self.context_encoder = Encoder(embed_size, hidden_size, drop_rate)
+        self.query_encoder = Encoder(embed_size, hidden_size, drop_rate)
+
+        self.attention = Attention(hidden_size, drop_rate)
+
+        self.modeling = ModelingLayer(hidden_size, drop_rate)
+
+        self.output = Output(hidden_size, drop_rate)
+
+    def forward(self, context_words, context_chars, context_masks, context_lens,
+                      query_words, query_chars, query_masks, query_lens):
+
+        context_embs = self.context_embeddings(context_words, context_chars)
+        query_embs = self.query_embeddings(query_words, query_chars)
+
+        context_encodes = self.context_encoder(context_embs, context_lens)
+        query_encodes = self.query_encoder(query_embs, query_lens)
+
+        global_hidden = self.attention(context_encodes, context_masks, query_encodes, query_masks)
+
+        modeling_out = self.modeling(global_hidden)
+
+        start_pos, end_pos = self.output(global_hidden, modeling_out)
+
+        return start_pos, end_pos
 
     def generate_sent_masks(self, encodings, seq_lengths):
         masks = torch.zeros(encodings.size(0), encodings.size(1), dtype=torch.float)
@@ -116,7 +211,5 @@ class BiDAF(nn.Module):
         # print(masks.device)
         # 这里是否需要转移mask到device上面?????
 
-    def forward(self, input_context, input_query, input_context_chars, input_query_chars):
-        pass
 
 
