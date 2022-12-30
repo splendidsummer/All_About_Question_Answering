@@ -2,11 +2,10 @@
 exp = "exp-0"
 
 # data directories
-train_file = './data/train_.json'
-dev_file = './data/dev_.json'
-data_dir = "./SQuAD/"
-train_dir = data_dir + "train/"
-dev_dir = data_dir + "dev/"
+train_file = './data/train-v2.0.json'
+dev_file = './data/dev-v2.0.json'
+data_dir = "./data/"
+glove_path = './data/glove.6B.100d.txt'
 
 # model paths
 spacy_en = "/root/miniconda3/lib/python3.8/site-packages/en_core_web_sm/en_core_web_sm-2.3.1"
