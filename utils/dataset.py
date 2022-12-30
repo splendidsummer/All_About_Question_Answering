@@ -77,6 +77,32 @@ class Drugdataset(Dataset):
         return data, data_suf, tags, data_len
 
 
+def sent_mask(sent_ids, padding_idx):
+    sent_lens = [len(sent) for sent in sent_ids]
+    max_len = max(sent_lens)
+    masks = torch.zeros((len(sent_ids), max_len))
+    for i, length in enumerate(sent_lens):
+        masks[i, : length] = 1
+
+    return masks
+
+
+def char_mask(char_ids, char_padding_idx, max_word_len):
+    """
+    :param char_ids:
+    :param char_padding_idx:
+    :param max_word_len: from the config setting
+    :return:
+    """
+    max_len = max([len(sent) for sent in char_ids])
+
+    padded_chars = [[w[: max_word_len] + [char_padding_idx] * (max_word_len-len(w)) for w in s] for s in char_ids]
+    dummy_word = [char_padding_idx] * max_word_len
+    padded_chars = [sent + dummy_word*(max_len-len(sent)) for sent in padded_chars]
+
+    return padded_chars
+
+
 if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
