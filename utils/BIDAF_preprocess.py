@@ -219,13 +219,13 @@ def index_answer(row, idx2word):
 def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
     def text2ids(text, word2idx):
         words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
-        ids = [word2idx[w] for w in words]
+        ids = [word2idx.get(w, word2idx['<unk>']) for w in words]
 
         return ids
 
     def text2charids(text, char2idx):
         words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
-        ids = [[char2idx(c) for c in w] for w in words]
+        ids = [[char2idx.get(c, char2idx['<unk>']) for c in w] for w in words]
         return ids
 
     df['context_ids'] = df.context.apply(text2ids, word2idx=word2idx)
