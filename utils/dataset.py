@@ -26,44 +26,37 @@ class SquadDataset(Dataset):
         question_char_id = self.question_char_ids[index]
         label = self.labels[index]
 
-        # return context_id, context_char_id, question_id, question_char_id, label
-        return context_id, context_char_id
+        return context_id, context_char_id, question_id, question_char_id, label
 
     def __len__(self):
         return len(self.context_ids)
 
     def batch_data_pro(self, batch_datas):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        context_ids = [i for (i, _) in batch_datas]
-        context_ids = self._pad_sent(context_ids)
-        padded_context = torch.tensor(context_ids, dtype=torch.long, device=device)
 
-        return padded_context
+        context_ids = [i for (i, _, _, _, _) in batch_datas]
+        context_char_ids = [i for (_, i, _, _, _) in batch_datas]
+        question_ids = [i for (_, _, i, _, _) in batch_datas]
+        question_char_ids = [i for (_, _, _, i, _) in batch_datas]
+        labels = torch.tensor([i for (_, _, _, _, i) in batch_datas], dtype=torch.long, device=device)
 
-        #
-        # context_ids = [i for (i, _, _, _, _) in batch_datas]
-        # context_char_ids = [i for (_, i, _, _, _) in batch_datas]
-        # question_ids = [i for (_, _, i, _, _) in batch_datas]
-        # question_char_ids = [i for (_, _, _, i, _) in batch_datas]
-        # labels = torch.tensor([i for (_, _, _, _, i) in batch_datas], dtype=torch.long, device=device)
-        #
-        # padded_context = torch.tensor(self._pad_sent(context_ids), dtype=torch.long, device=device)
-        # padded_context_char = torch.tensor(self._pad_char(context_char_ids), dtype=torch.long, device=device)
-        #
-        # padded_question = torch.tensor(self._pad_sent(question_ids), dtype=torch.long, device=device)
-        # padded_question_char = torch.tensor(self._pad_char(question_char_ids), dtype=torch.long, device=device)
-        #
-        # context_masks = torch.tensor(self._sent_mask(context_ids), dtype=torch.long, device=device)
-        # question_mask = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
-        #
-        # return padded_context, padded_context_char, padded_question, \
-        #         padded_question_char, context_masks, question_mask, labels
+        padded_context = torch.tensor(self._pad_sent(context_ids), dtype=torch.long, device=device)
+        padded_context_char = torch.tensor(self._pad_char(context_char_ids), dtype=torch.long, device=device)
+
+        padded_question = torch.tensor(self._pad_sent(question_ids), dtype=torch.long, device=device)
+        padded_question_char = torch.tensor(self._pad_char(question_char_ids), dtype=torch.long, device=device)
+
+        context_masks = torch.tensor(self._sent_mask(context_ids), dtype=torch.long, device=device)
+        question_mask = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
+
+        return padded_context, padded_context_char, padded_question, \
+                padded_question_char, context_masks, question_mask, labels
 
     @staticmethod
     def _sent_mask(sent_ids):
         sent_lens = [len(sent) for sent in sent_ids]
         max_len = max(sent_lens)
-        masks = torch.zeros((len(), max_len))
+        masks = torch.zeros((len(sent_ids), max_len))
         for i, length in enumerate(sent_lens):
             masks[i, : length] = 1
 
@@ -73,7 +66,7 @@ class SquadDataset(Dataset):
         sent_lens = [len(sent) for sent in sent_ids]
         max_len = max(sent_lens)
         padded_sents = [sent + [self.padding_idx] * (max_len - len(sent)) for sent in sent_ids]
-        print(padded_sents)
+        # print(padded_sents)
         return padded_sents
 
     def _pad_char(self, char_ids):
@@ -126,7 +119,7 @@ if __name__ == '__main__':
     dataset = SquadDataset(context, context_char, question,
                            question_char, labels)
 
-    dataloader = DataLoader(dataset, batch_size=2)
+    dataloader = DataLoader(dataset, batch_size=2, collate_fn=dataset.batch_data_pro)
 
     for data_batch in dataloader:
         # assuming padded_context, padded_context_char, padded_question,
