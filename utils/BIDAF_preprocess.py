@@ -94,8 +94,8 @@ def build_word_vocab(text):
     word2idx = {word: idx for idx, word in enumerate(word_vocab)}
     print(f"word2idx-length: {len(word2idx)}")
     idx2word = {v: k for k, v in word2idx.items()}
-    word2idx_file = './data/vocab_word2idx.pkl'
-    idx2word_file = './data/vocab_idx2word.pkl'
+    word2idx_file = config.data_dir + 'vocab_word2idx.pkl'
+    idx2word_file = config.data_dir + 'vocab_idx2word.pkl'
     pickle.dump(word2idx, open(word2idx_file, 'wb'))
     pickle.dump(idx2word, open(idx2word_file, 'wb'))
 
@@ -120,13 +120,74 @@ def build_char_vocab(vocab_text):
     char2idx = {char: idx for idx, char in enumerate(char_vocab)}
     idx2char = {idx: char for idx, char in enumerate(char_vocab)}
     print(f"char2idx-length: {len(char2idx)}")
-    char2idx_file = './data/char2idx.pkl'
-    idx2char_file = './data/idx2char.pkl'
+    char2idx_file = config.data_dir + 'char2idx.pkl'
+    idx2char_file = config.data_dir + 'idx2char.pkl'
 
     pickle.dump(char2idx, open(char2idx_file, 'wb'))
     pickle.dump(idx2char, open(idx2char_file, 'wb'))
 
     return char2idx, idx2char, char_vocab
+
+
+def get_error_indices(df, idx2word):
+    start_value_error, end_value_error, assert_error = test_indices(df, idx2word)
+    err_idx = start_value_error + end_value_error + assert_error
+    err_idx = set(err_idx)
+    print(f"Number of error indices: {len(err_idx)}")
+
+    return err_idx
+
+
+def test_indices(df, idx2word):
+    '''
+    Performs the tests mentioned above. This method also gets the start and end of the answers
+    with respect to the context_ids for each example.
+
+    :param dataframe df: SQUAD df
+    :param dict idx2word: inverse mapping of token ids to words
+    :returns
+        list start_value_error: example idx where the start idx is not found in the start spans
+                                of the text
+        list end_value_error: example idx where the end idx is not found in the end spans
+                              of the text
+        list assert_error: examples that fail assertion errors. A majority are due to the above errors
+
+    '''
+
+    start_value_error = []
+    end_value_error = []
+    assert_error = []
+    for index, row in df.iterrows():
+
+        answer_tokens = [w.text for w in nlp(row['answer'], disable=['parser', 'tagger', 'ner'])]
+
+        start_token = answer_tokens[0]
+        end_token = answer_tokens[-1]
+
+        context_span = [(word.idx, word.idx + len(word.text))
+                        for word in nlp(row['context'], disable=['parser', 'tagger', 'ner'])]
+
+        starts, ends = zip(*context_span)
+
+        answer_start, answer_end = row['label']
+
+        try:
+            start_idx = starts.index(answer_start)
+        except:
+
+            start_value_error.append(index)
+        try:
+            end_idx = ends.index(answer_end)
+        except:
+            end_value_error.append(index)
+
+        try:
+            assert idx2word[row['context_ids'][start_idx]] == answer_tokens[0]
+            assert idx2word[row['context_ids'][end_idx]] == answer_tokens[-1]
+        except:
+            assert_error.append(index)
+
+    return start_value_error, end_value_error, assert_error
 
 
 def index_answer(row, idx2word):
@@ -155,17 +216,26 @@ def index_answer(row, idx2word):
     return [start_idx, end_idx]
 
 
-def postprocess_df(df, word2idx, idx2word, prex_filename='train'):
+def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
     def text2ids(text, word2idx):
         words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
         ids = [word2idx[w] for w in words]
 
         return ids
 
+    def text2charids(text, char2idx):
+        words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
+        ids = [[char2idx(c) for c in w] for w in words]
+        return ids
+
     df['context_ids'] = df.context.apply(text2ids, word2idx=word2idx)
     df['question_ids'] = df.question.apply(text2ids, word2idx=word2idx)
-    df['lable_ids'] = df.label.apply(index_answer, axis=1, idx2word=idx2word)
-    df.to_pickle(f'{prex_filename}_df.pkl')
+    df['context_char_ids'] = df.context.apply(text2charids, char2idx=char2idx)
+    df['question_char_ids'] = df.question.apply(text2charids, char2idx=char2idx)
+    df_error = get_error_indices(df, idx2word)
+    df.drop(df_error, inplace=True)
+    df['lable_ids'] = df.apply(index_answer, axis=1, idx2word=idx2word)
+    df.to_pickle(config.data_dir + f'{prex_filename}_df.pkl')
 
     return df
 
@@ -198,10 +268,21 @@ def create_embedding_matrix(word2idx, embedding_dict):
         if word == '<unk>':
             embedding_matrix[idx] = np.mean(embedding_matrix, axis=0, keepdims=True)
 
-    glove_mat_file = './data/glove_matrix.pkl'
+    glove_mat_file = config.data_dir + 'glove_matrix.pkl'
     pickle.dump(embedding_matrix, open(glove_mat_file, 'wb'))
 
     return embedding_matrix
+
+
+def save_features(context_ids, context_char_ids, question_ids, question_char_ids, labels, prex='train'):
+    np.savez(
+                os.path.join(config.data_dir, f"{prex}_features"),
+                context_ids=np.array(context_ids),
+                context_char_ids=np.array(context_char_ids),
+                question_ids=np.array(question_ids),
+                question_char_ids=np.array(question_char_ids),
+                labels=np.array(labels)
+            )
 
 
 # def simplied_build_char_vocab(vocab_text):
@@ -237,17 +318,13 @@ if __name__ == '__main__':
     train_df = postprocess_df(train_df, word2idx, idx2word, prex_filename='train')
     dev_df = postprocess_df(dev_df, word2idx, idx2word, prex_filename='dev')
 
+    save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
+                  train_df.question_char_ids, train_df.labels)
+    save_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
+                  dev_df.question_char_ids, dev_df.labels)
+
     glove_path = config.glove_path
     glove_dict = load_pretrain_embedding(glove_path)
     embedding_matrix = create_embedding_matrix(word2idx, glove_dict)
-
-    
-
-
-
-
-
-
-
 
 

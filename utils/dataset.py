@@ -1,134 +1,135 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 import os, pickle, pdb
+import config
 import nltk
-from xml.dom.minidom import parse
 
 
-class Drugdataset(Dataset):
-    def __init__(self, data, word_index, suffix_index):  # tag_index can be defined in other place
-        super(Drugdataset, self).__init__()
-        labels = ['B-drug', 'B-drug_n', 'B-brand', 'B-group', 'I-drug', 'I-drug_n', 'I-brand', 'I-group', 'O', '<PAD>']
-        self.tag2index = {tag: idx for (idx, tag) in enumerate(sorted(labels))}
-
-        self.data = data
-        self.word_index = word_index
-        self.suffix_index = suffix_index
-
-        self.tag_index = {label: idx for (idx, label) in enumerate(sorted(labels))}
-        # print('tag index:  ', self.tag_index)
-        self.sents_tokens, self.sids = self.get_sent_tokens
-        self.sents_tags = self.get_sent_tags
+class SquadDataset(Dataset):
+    def __init__(self, context_ids, context_char_ids, question_ids,
+                 question_char_ids, labels, padding_idx=1, char_padding_idx=1):
+        # super(SquadDataset, self).__init__()
+        self.context_ids = context_ids
+        self.context_char_ids = context_char_ids
+        self.question_ids = question_ids
+        self.question_char_ids = question_char_ids
+        self.labels = labels
+        self.padding_idx = padding_idx
+        self.char_padding_idx = char_padding_idx
+        self.max_word_len = config.max_len_word
+        self.some_att = None
 
     def __getitem__(self, index):
-        seq_tokens = self.sents_tokens[index]
-        seq_tags = self.sents_tags[index]
-        seq_tokens = [self.word_index.get(w, self.word_index['<UNK>']) for w in seq_tokens]
-        seq_suf_tokens = [self.suffix_index.get(w, self.suffix_index['<UNK>']) for w in seq_tokens]
+        context_id = self.context_ids[index]
+        context_char_id = self.context_char_ids[index]
+        question_id = self.question_ids[index]
+        question_char_id = self.question_char_ids[index]
+        label = self.labels[index]
 
-        seq_tags = [self.tag_index[tag] for tag in seq_tags]
-        return seq_tokens, seq_suf_tokens, seq_tags
+        # return context_id, context_char_id, question_id, question_char_id, label
+        return context_id, context_char_id
 
     def __len__(self):
-        assert len(self.sents_tokens) == len(self.sents_tags)
-        return len(self.sents_tags)
-
-    @property
-    def get_sent_tokens(self):
-        sents_tokens = []
-        sids = []
-        for sid in self.data:
-            sent_tok_lst = self.data[sid]
-            sent_tokens = [sent_tok_lst[i]['form'] for i in range(len(sent_tok_lst))]
-            sents_tokens.append(sent_tokens)
-            sids.append(sid)
-        return sents_tokens, sids
-
-    @property
-    def get_sent_tags(self):
-        sents_tags = []
-        for sid in self.data:
-            sent_tok_lst = self.data[sid]
-            sent_tags = [sent_tok_lst[i]['tag'] for i in range(len(sent_tok_lst))]
-            sents_tags.append(sent_tags)
-        return sents_tags
-
-    @property
-    def tokens(self):
-        for sid in self.data:
-            s = []
-            for w in self.data[sid]:  # w = tokeb in upper part
-                s.append((sid, w['form'], w['start'], w['end']))
-            yield s
+        return len(self.context_ids)
 
     def batch_data_pro(self, batch_datas):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        data_len = [len(data) for data, _, _ in batch_datas]
-        if any in data_len == 0:
-            pdb.set_trace()
-        max_len = max(data_len)
-        data = [i + [self.word_index['<PAD>']] * (max_len - len(i)) for (i, _, _) in batch_datas]
-        data_suf = [i + [self.suffix_index['<PAD>']] * (max_len - len(i)) for (_, i, _) in batch_datas]
-        # 这里有问题, tag的pad标签不对
-        tags = [i + [self.tag2index['<PAD>']] * (max_len - len(i)) for (_, _, i) in batch_datas]
-        data = torch.tensor(data, dtype=torch.long, device=device)
-        data_suf = torch.tensor(data_suf, dtype=torch.long, device=device)
-        tags = torch.tensor(tags, dtype=torch.long, device=device)
-        return data, data_suf, tags, data_len
+        context_ids = [i for (i, _) in batch_datas]
+        context_ids = self._pad_sent(context_ids)
+        padded_context = torch.tensor(context_ids, dtype=torch.long, device=device)
 
+        return padded_context
 
-def sent_mask(sent_ids, padding_idx):
-    sent_lens = [len(sent) for sent in sent_ids]
-    max_len = max(sent_lens)
-    masks = torch.zeros((len(sent_ids), max_len))
-    for i, length in enumerate(sent_lens):
-        masks[i, : length] = 1
+        #
+        # context_ids = [i for (i, _, _, _, _) in batch_datas]
+        # context_char_ids = [i for (_, i, _, _, _) in batch_datas]
+        # question_ids = [i for (_, _, i, _, _) in batch_datas]
+        # question_char_ids = [i for (_, _, _, i, _) in batch_datas]
+        # labels = torch.tensor([i for (_, _, _, _, i) in batch_datas], dtype=torch.long, device=device)
+        #
+        # padded_context = torch.tensor(self._pad_sent(context_ids), dtype=torch.long, device=device)
+        # padded_context_char = torch.tensor(self._pad_char(context_char_ids), dtype=torch.long, device=device)
+        #
+        # padded_question = torch.tensor(self._pad_sent(question_ids), dtype=torch.long, device=device)
+        # padded_question_char = torch.tensor(self._pad_char(question_char_ids), dtype=torch.long, device=device)
+        #
+        # context_masks = torch.tensor(self._sent_mask(context_ids), dtype=torch.long, device=device)
+        # question_mask = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
+        #
+        # return padded_context, padded_context_char, padded_question, \
+        #         padded_question_char, context_masks, question_mask, labels
 
-    return masks
+    @staticmethod
+    def _sent_mask(sent_ids):
+        sent_lens = [len(sent) for sent in sent_ids]
+        max_len = max(sent_lens)
+        masks = torch.zeros((len(), max_len))
+        for i, length in enumerate(sent_lens):
+            masks[i, : length] = 1
 
+        return masks
 
-def char_mask(char_ids, char_padding_idx, max_word_len):
-    """
-    :param char_ids:
-    :param char_padding_idx:
-    :param max_word_len: from the config setting
-    :return:
-    """
-    max_len = max([len(sent) for sent in char_ids])
+    def _pad_sent(self, sent_ids):
+        sent_lens = [len(sent) for sent in sent_ids]
+        max_len = max(sent_lens)
+        padded_sents = [sent + [self.padding_idx] * (max_len - len(sent)) for sent in sent_ids]
+        print(padded_sents)
+        return padded_sents
 
-    padded_chars = [[w[: max_word_len] + [char_padding_idx] * (max_word_len-len(w)) for w in s] for s in char_ids]
-    dummy_word = [char_padding_idx] * max_word_len
-    padded_chars = [sent + dummy_word*(max_len-len(sent)) for sent in padded_chars]
+    def _pad_char(self, char_ids):
+        """
+        :param char_ids:
+        :param char_padding_idx:
+        :param max_word_len: from the config setting
+        :return:
+        """
+        max_len = max([len(sent) for sent in char_ids])
 
-    return padded_chars
+        padded_chars = [[w[: self.max_word_len] + [self.char_padding_idx] *
+                         (self.max_word_len - len(w)) for w in s] for s in char_ids]
+        dummy_word = [self.char_padding_idx] * self.max_word_len
+        padded_chars = [sent + [dummy_word] * (max_len - len(sent)) for sent in padded_chars]
+
+        return padded_chars
 
 
 if __name__ == '__main__':
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    context = [
+        list(range(2)),
+        list(range(3)),
+        # list(range(8)),
+        # list(range(12))
+    ]
 
-    word_index = pickle.load(open('../data/preprocess/drug_vocab.pkl', 'rb'))
-    parse_train_file = '../data/preprocess/parse_train_data.pkl'
-    parse_devel_file = '../data/preprocess/parse_devel_data.pkl'
-    parse_test_file = '../data/preprocess/parse_test_data.pkl'
+    question = [
+        list(range(3)),
+        list(range(1)),
+        # list(range(8)),
+        # list(range(12))
+    ]
 
-    train_data = pickle.load(open(parse_train_file, 'rb'))
-    devel_data = pickle.load(open(parse_devel_file, 'rb'))
-    test_data = pickle.load(open(parse_test_file, 'rb'))
+    context_char = [
+        [list(range(5)), list(range(6))],
+        [list(range(8)), list(range(12)), list(range(6))]
+    ]
 
-    dataset = Drugdataset(train_data, word_index)
-    batch_size = 32
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=dataset.batch_data_pro)
-    i = 0
+    question_char = [
+        [list(range(4)), list(range(8)), list(range(12))],
+        [list(range(5))],
+        # list(range(8)),
+        # list(range(12))
+    ]
 
-    for data, tag, lens in dataloader:
-        print('{}th data bacth'.format(i))
+    labels = [1, 2]
 
-        try:
-            print(data.shape)
-            print(tag.shape)
-            print(lens[0])
+    dataset = SquadDataset(context, context_char, question,
+                           question_char, labels)
 
+    dataloader = DataLoader(dataset, batch_size=2)
 
-        except ValueError:
-            print('Wrong')
+    for data_batch in dataloader:
+        # assuming padded_context, padded_context_char, padded_question,
+        # padded_question_char, context_masks, question_mask
+        for item in data_batch:
+            print(item)
