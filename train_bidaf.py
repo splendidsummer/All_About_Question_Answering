@@ -34,7 +34,7 @@ weight_decay = config.weight_decay
 activation = config.activation
 # augment = config.augment
 
-with open(config.glove_path, 'rb', encoding='utf-8') as f:
+with open(config.glove_mat_path, 'rb', encoding='utf-8') as f:
     glove_vectors = pickle.load(f)
 
 with open(config.glove_path, 'rb', encoding='utf-8') as f:

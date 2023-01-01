@@ -319,9 +319,9 @@ if __name__ == '__main__':
     dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx, prex_filename='dev')
 
     save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
-                  train_df.question_char_ids, train_df.labels)
+                  train_df.question_char_ids, train_df.label_ids)
     save_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
-                  dev_df.question_char_ids, dev_df.labels)
+                  dev_df.question_char_ids, dev_df.label_ids)
 
     glove_path = config.glove_path
     glove_dict = load_pretrain_embedding(glove_path)
