@@ -9,7 +9,7 @@ nlp = spacy.load('en_core_web_sm')
 
 
 def load_json(path):
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         content = json.load(f)
     return content
 
