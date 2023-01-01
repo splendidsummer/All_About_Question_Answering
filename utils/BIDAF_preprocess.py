@@ -315,8 +315,8 @@ if __name__ == '__main__':
     word2idx, idx2word, _ = build_word_vocab(vocab_text)
     char2idx, idx2char, _ = build_char_vocab(vocab_text)
 
-    train_df = postprocess_df(train_df, word2idx, idx2word, prex_filename='train')
-    dev_df = postprocess_df(dev_df, word2idx, idx2word, prex_filename='dev')
+    train_df = postprocess_df(train_df, word2idx, idx2word, char2idx, prex_filename='train')
+    dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx, prex_filename='dev')
 
     save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
                   train_df.question_char_ids, train_df.labels)
