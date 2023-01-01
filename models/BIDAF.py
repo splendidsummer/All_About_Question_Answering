@@ -204,12 +204,67 @@ class BiDAF(nn.Module):
 
         return start_pos, end_pos
 
-    def generate_sent_masks(self, encodings, seq_lengths):
-        masks = torch.zeros(encodings.size(0), encodings.size(1), dtype=torch.float)
-        for i, idx in enumerate(seq_lengths):
-            masks[i, idx:] = 1
-        # print(masks.device)
-        # 这里是否需要转移mask到device上面?????
+
+class CharacterEmbeddingLayer(nn.Module):
+
+    def __init__(self, char_vocab_dim, char_emb_dim, num_output_channels, kernel_size):
+        super().__init__()
+
+        self.char_emb_dim = char_emb_dim
+
+        self.char_embedding = nn.Embedding(char_vocab_dim, char_emb_dim, padding_idx=1)
+
+        self.char_convolution = nn.Conv2d(in_channels=1, out_channels=100, kernel_size=kernel_size)
+
+        self.relu = nn.ReLU()
+
+        self.dropout = nn.Dropout(0.2)
+
+    def forward(self, x):
+        # x = [bs, seq_len, word_len]
+        # returns : [batch_size, seq_len, num_output_channels]
+        # the output can be thought of as another feature embedding of dim 100.
+
+        batch_size = x.shape[0]
+
+        x = self.dropout(self.char_embedding(x))
+        # x = [bs, seq_len, word_len, char_emb_dim]
+
+        # following three operations manipulate x in such a way that
+        # it closely resembles an image. this format is important before
+        # we perform convolution on the character embeddings.
+
+        x = x.permute(0, 1, 3, 2)
+        # x = [bs, seq_len, char_emb_dim, word_len]
+
+        x = x.view(-1, self.char_emb_dim, x.shape[3])
+        # x = [bs*seq_len, char_emb_dim, word_len]
+
+        x = x.unsqueeze(1)
+        # x = [bs*seq_len, 1, char_emb_dim, word_len]
+
+        # x is now in a format that can be accepted by a conv layer.
+        # think of the tensor above in terms of an image of dimension
+        # (N, C_in, H_in, W_in).
+
+        x = self.relu(self.char_convolution(x))
+        # x = [bs*seq_len, out_channels, H_out, W_out]
+
+        x = x.squeeze()
+        # x = [bs*seq_len, out_channels, W_out]
+
+        x = F.max_pool1d(x, x.shape[2]).squeeze()
+        # x = [bs*seq_len, out_channels, 1] => [bs*seq_len, out_channels]
+
+        x = x.view(batch_size, -1, x.shape[-1])
+        # x = [bs, seq_len, out_channels]
+        # x = [bs, seq_len, features] = [bs, seq_len, 100]
+
+        return x
+
+
+if __name__ == '__main__':
+    print(1111)
 
 
 

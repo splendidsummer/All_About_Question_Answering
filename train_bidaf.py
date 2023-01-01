@@ -19,6 +19,10 @@ wandb.init(
     ####
 )
 
+
+
+
+
 # To log wandb
 for epoch in range(10):
     wandb.log({'epoch': epoch, 'loss': loss})
