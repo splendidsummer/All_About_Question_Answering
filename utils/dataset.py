@@ -62,6 +62,8 @@ class SquadDataset(Dataset):
 
         return masks
 
+    def _get_seq_length(self,sent_ids):
+
     def _pad_sent(self, sent_ids):
         sent_lens = [len(sent) for sent in sent_ids]
         max_len = max(sent_lens)

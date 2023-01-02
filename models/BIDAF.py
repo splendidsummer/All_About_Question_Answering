@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import config
 
 
 class CharCNN(nn.Module):
@@ -16,7 +17,7 @@ class CharCNN(nn.Module):
         :param input_char_tensor:
         :return:
         """
-        conv_chars = self.conv(input_char_tensor.permute(0, 1, 3, 2))
+        conv_chars = self.conv(input_char_tensor)
         return conv_chars
 
 
@@ -44,10 +45,10 @@ class Embedding(nn.Module):
                                                     ' conflicts with designated embedding size.'
 
         self.char_embed_size = char_embed_size
-        self.embed_size = glove_vectors.size(1)
+        self.embed_size = embed_size
 
         self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
-        self.cembed = nn.Embedding(char_vocab_size, char_embed_size, padding_idx=1)
+        self.cembed = nn.Embedding(config.char_vocab_size, char_embed_size, padding_idx=1)
         self.proj = nn.Linear(embed_size, hidden_size, bias=False)
         self.cnn = CharCNN(char_embed_size, embed_size, max_word_length)
 
@@ -91,7 +92,7 @@ class Encoder(nn.Module):
         :param bidirectional:
         """
         super(Encoder, self).__init__()
-        self.encoder = nn.LSTM(embed_size, hidden_size, batch_first=True, bidirectional=True)
+        self.encoder = nn.LSTM(2*embed_size, hidden_size, batch_first=True, bidirectional=True)
         self.dropout = nn.Dropout(drop_rate)
 
     def forward(self, inputs, seq_lengths):
@@ -280,9 +281,21 @@ class BiDAF(nn.Module):
 
 if __name__ == '__main__':
     batch_size, seq_len, max_word_len, char_embed_size = 4, 15, 10, 8
+
     inputs = torch.randn(batch_size, seq_len, max_word_len, char_embed_size)
-    charcnn = CharCNN(in_ch=char_embed_size, out_ch=100, max_word_length=max_word_len, char_embed_size=char_embed_size)
+    inputs = inputs.view(-1, char_embed_size, inputs.size(2)).unsqueeze(1)
+    charcnn = CharCNN(out_ch=100, max_word_length=max_word_len, char_embed_size=char_embed_size)
     out = charcnn(inputs)
+    out = out.squeeze()
+
+    # shape before squeeze = [bs*seq_len, out_channels=100, 1], after squeeze = [bs*seq_len, out_channels=100]
+    out = F.max_pool1d(out, out.size(2)).squeeze()
+    # char_embed.shape = [bs, seq_len, out_channels=100]
+    out = out.view(batch_size, -1, 100)
+
+    highway = Highway(2, 100)
+    out = highway(out)
+
 
     print(out.shape)
     print(111)

@@ -30,7 +30,6 @@ dev_feature_path = './data/dev_features.npz'
 idx2word_path = './data/vocab_idx2word.pkl'
 word2idx_path = './data/vocab_word2idx.pkl'
 
-
 # wandb configuration
 max_len_word = 25
 wandb_config = {
@@ -50,7 +49,11 @@ wandb_config = {
     # 'char_channel_size': 100,
     'cuda': True,
     'pretrained': False,
-    }
+}
 
 # model saving path
 squad_models = "output/" + exp
+
+#  network params
+char_vocab_size = 204
+
