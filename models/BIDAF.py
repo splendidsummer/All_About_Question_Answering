@@ -37,16 +37,15 @@ class Highway(nn.Module):
 
 
 class Embedding(nn.Module):
-    def __init__(self, glove_vectors, char_vectors,
-                 char_embed_size, embed_size, hidden_size, max_word_length,
-                 drop_prob):
+    def __init__(self, glove_vectors, char_vocab_size, char_embed_size,
+                 embed_size, hidden_size, max_word_length, drop_prob):
 
         super(Embedding, self).__init__()
         assert glove_vectors.size(1) == embed_size, 'pretrained wording embedding size' \
                                                     ' conflicts with designated embedding size.'
 
         self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
-        self.cembed = nn.Embedding.from_pretrained(char_vectors, freeze=False)
+        self.cembed = nn.Embedding(char_vocab_size, char_embed_size, padding_idx=1)
         self.proj = nn.Linear(embed_size, hidden_size, bias=False)
         self.cnn = CharCNN(char_embed_size, embed_size, max_word_length)
         self.dropout = nn.Dropout(drop_prob)
@@ -167,16 +166,15 @@ class Output(nn.Module):
 
 
 class BiDAF(nn.Module):
-    def __init__(self, glove_vectors, char_vectors, embed_size, char_embed_size,
-                 hidden_size, vocab_size, max_word_length, drop_rate,
-                 bidirectional=True):
+    def __init__(self, glove_vectors, char_vocab_size, char_embed_size, embed_size,
+                 hidden_size, max_word_length, drop_rate):
 
         super(BiDAF, self).__init__()
 
-        self.context_embeddings = Embedding(glove_vectors, char_vectors, char_embed_size,
-                                    embed_size, hidden_size, max_word_length, drop_rate)
-        self.query_embeddings = Embedding(glove_vectors, char_vectors, char_embed_size,
-                                    embed_size, hidden_size, max_word_length, drop_rate)
+        self.context_embeddings = Embedding(glove_vectors, char_vocab_size, char_embed_size,
+                                            embed_size, hidden_size, max_word_length, drop_rate)
+        self.query_embeddings = Embedding(glove_vectors, char_vocab_size, char_embed_size,
+                                          embed_size, hidden_size, max_word_length, drop_rate)
 
         self.context_encoder = Encoder(embed_size, hidden_size, drop_rate)
         self.query_encoder = Encoder(embed_size, hidden_size, drop_rate)
@@ -188,7 +186,7 @@ class BiDAF(nn.Module):
         self.output = Output(hidden_size, drop_rate)
 
     def forward(self, context_words, context_chars, context_masks, context_lens,
-                      query_words, query_chars, query_masks, query_lens):
+                query_words, query_chars, query_masks, query_lens):
 
         context_embs = self.context_embeddings(context_words, context_chars)
         query_embs = self.query_embeddings(query_words, query_chars)

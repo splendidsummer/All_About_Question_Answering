@@ -276,7 +276,7 @@ def create_embedding_matrix(word2idx, embedding_dict):
 
 def save_features(context_ids, context_char_ids, question_ids, question_char_ids, labels, prex='train'):
     np.savez(
-                os.path.join(config.data_dir, f"{prex}_features"),
+                os.path.join(config.data_dir, f"{prex}_features.npz"),
                 context_ids=np.array(context_ids),
                 context_char_ids=np.array(context_char_ids),
                 question_ids=np.array(question_ids),
@@ -321,7 +321,7 @@ if __name__ == '__main__':
     save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
                   train_df.question_char_ids, train_df.label_ids)
     save_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
-                  dev_df.question_char_ids, dev_df.label_ids)
+                  dev_df.question_char_ids, dev_df.label_ids, prex='dev')
 
     glove_path = config.glove_path
     glove_dict = load_pretrain_embedding(glove_path)
