@@ -27,8 +27,8 @@ wandb.init(
 )
 
 config = wandb.config
-batch_size  = config.batch_size
-epochs = config.freeze_epochs
+batch_size = config.batch_size
+num_epochs = config.num_epochs
 lr = config.learning_rate
 weight_decay = config.weight_decay
 activation = config.activation
@@ -44,8 +44,13 @@ drop_rate = config.drop_rate
 with open(config.glove_mat_path, 'rb', encoding='utf-8') as f:
     glove_vectors = pickle.load(f)
 
-with open(config.glove_path, 'rb', encoding='utf-8') as f:
-    char_vectors = pickle.load(f)
+with open(config.idx2word_path, 'rb', encoding='utf-8') as f:
+    idx2word = pickle.load(f)
+
+with open(config.dev_df_path, 'rb', encoding='utf-8') as f:
+    val_df = pickle.load(f)
+
+val_ids = val_df.id
 
 train_data = np.load(config.train_feature_path)  # using like a dict
 dev_data = np.load(config.dev_feature_path)
@@ -55,6 +60,7 @@ dev_data = [i for (_, i) in dev_data.items()]
 
 trainset = SquadDataset(*train_data)
 valset = SquadDataset(*dev_data)
+
 train_loader = DataLoader(trainset,
                           batch_size=batch_size,
                           shuffle=True,
@@ -70,7 +76,6 @@ val_loader = DataLoader(valset,
 
 model = BiDAF(glove_vectors, char_vocab_size, char_embed_size, embed_size,
               hidden_size, max_word_length, drop_rate).to(device)
-.
 wandb.watch(model)
 
 # optimizer Adadelta correction with the scale of gradients
@@ -80,6 +85,53 @@ optimizer = optim.Adadelta(model.parameters(),
                            )
 
 loss_fn = nn.CrossEntropyLoss()
+
+
+def evaluate_customize(predictions):
+
+    pass
+
+
+def evaluate(predictions):
+    '''
+    Gets a dictionary of predictions with question_id as key
+    and prediction as value. The validation dataset has multiple
+    answers for a single question. Hence we compare our prediction
+    with all the answers and choose the one that gives us
+    the maximum metric (em or f1).
+    This method first parses the JSON file, gets all the answers
+    for a given id and then passes the list of answers and the
+    predictions to calculate em, f1.
+
+
+    :param dict predictions
+    Returns
+    : exact_match: 1 if the prediction and ground truth
+      match exactly, 0 otherwise.
+    : f1_score:
+    '''
+
+    with open('./data/dev-v2.0.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    data = data['data']   # dataset is a list object
+    f1 = exact_match = total = 0
+    for article in data:
+        for paragraph in article['paragraphs']:
+            for qa in paragraph['qas']:
+                total += 1
+                if qa['id'] not in predictions:
+                    continue
+
+                ground_truths = list(map(lambda x: x['text'], qa['answers']))
+                prediction = predictions[qa['id']]
+                exact_match += metric_max_over_ground_truths(exact_match_score, prediction, ground_truths)
+                f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
+
+    exact_match = 100.0 * exact_match / total
+    f1 = 100.0 * f1 / total
+
+    return exact_match, f1
 
 
 def train_one_epoch():
@@ -105,59 +157,92 @@ def train_one_epoch():
     return train_loss / len(trainset)
 
 
-def valid_one_epoch(model, valid_dataset):
+def valid_one_epoch():
     print("Starting validation .........")
     valid_loss = 0.
     batch_count = 0
-    # f1, em = 0., 0.
 
     model.eval()
-    predictions = {}
+    predictions = []
 
-    for batch in valid_dataset:
-
+    for batch in val_loader:
+        ids = val_ids[batch_count*batch_size: (batch_count+1)*batch_size]
         if batch_count % 100 == 0:
             print(f"Starting batch {batch_count}")
-        batch_count += 1
 
-        context, question, char_ctx, char_ques, label, ctx, answers, ids = batch
-        # context, question, char_ctx, char_ques, label = context.to(device), question.to(device), \
-        #                                                 char_ctx.to(device), char_ques.to(device), label.to(device)
+        context, question, char_ctx, char_ques, context_mask, question_mask, labels = batch
 
         with torch.no_grad():
-
-            s_idx, e_idx = label[:, 0], label[:, 1]
-
-            preds = model(context, question, char_ctx, char_ques)
-
+            s_idx, e_idx = labels[:, 0], labels[:, 1]
+            preds = model(context, question, char_ctx, char_ques, context_mask, question_mask)
             p1, p2 = preds
-
-            loss = F.cross_entropy(p1, s_idx) + F.cross_entropy(p2, e_idx)
+            loss = loss_fn(p1, s_idx) + loss_fn(p2, e_idx)
 
             valid_loss += loss.item()
 
             batch_size, c_len = p1.size()
             ls = nn.LogSoftmax(dim=1)
-            mask = (torch.ones(c_len, c_len) * float('-inf')).to(device).tril(-1).unsqueeze(0).expand(batch_size, -1,
-                                                                                                      -1)
+            mask = (torch.ones(c_len, c_len) * float('-inf')).to(device).tril(-1).\
+                unsqueeze(0).expand(batch_size, -1, -1)
+
+            # shape of ls(p1).unsequeeze(2) = [bs, c_len, 1],
+            # shape of ls(p2).unsqueeze(1) = [bs, 1, c_len]
+            # shape of the expression: [bs, c_len, c_len]
             score = (ls(p1).unsqueeze(2) + ls(p2).unsqueeze(1)) + mask
             score, s_idx = score.max(dim=1)
             score, e_idx = score.max(dim=1)
             s_idx = torch.gather(s_idx, 1, e_idx.view(-1, 1)).squeeze()
 
             for i in range(batch_size):
-                id = ids[i]
+                val_id = ids[i]
                 pred = context[i][s_idx[i]:e_idx[i] + 1]
                 pred = ' '.join([idx2word[idx.item()] for idx in pred])
-                predictions[id] = pred
+                predictions[val_id] = pred
+
+        batch_count += 1
 
     em, f1 = evaluate(predictions)
-    return valid_loss / len(valid_dataset), em, f1
+    return valid_loss / len(valset), em, f1
 
 
-wandb.log({'epoch': epoch, 'train_loss': loss})
+def train():
+    train_losses = []
+    valid_losses = []
+    ems = []
+    f1s = []
+    for epoch in range(num_epochs):
+        print(f"Epoch {epoch + 1}")
+        start_time = time.time()
 
-wandb.save(model)
+        train_loss = train_one_epoch()
+        valid_loss, em, f1 = valid_one_epoch()
 
-torch.save(model.state_dict(), 'model.pth')  # possible to use .h5 file here??
-wandb.save('model_' + now + '.pth')   # pth?? pt?? h5??
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': valid_loss,
+            'em': em,
+            'f1': f1,
+        }, 'bidaf_run_{}.pth'.format(epoch))
+
+        end_time = time.time()
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+
+        train_losses.append(train_loss)
+        valid_losses.append(valid_loss)
+        ems.append(em)
+        f1s.append(f1)
+        wandb.log({'epoch': epoch, 'train_loss': train_loss, 'val_loss': valid_loss,
+                   'exact_match': em, 'f1_score': f1})
+
+        print(f"Epoch train loss : {train_loss}| Time: {epoch_mins}m {epoch_secs}s")
+        print(f"Epoch valid loss: {valid_loss}")
+        print(f"Epoch EM: {em}")
+        print(f"Epoch F1: {f1}")
+        print("====================================================================================")
+
+    wandb.save(model)
+
+    torch.save(model.state_dict(), 'model.pth')  # possible to use .h5 file here??
+    wandb.save('model_' + now + '.pth')   # pth?? pt?? h5??

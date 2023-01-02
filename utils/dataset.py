@@ -47,10 +47,10 @@ class SquadDataset(Dataset):
         padded_question_char = torch.tensor(self._pad_char(question_char_ids), dtype=torch.long, device=device)
 
         context_masks = torch.tensor(self._sent_mask(context_ids), dtype=torch.long, device=device)
-        question_mask = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
+        question_masks = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
 
         return padded_context, padded_context_char, padded_question, \
-                padded_question_char, context_masks, question_mask, labels
+                padded_question_char, context_masks, question_masks, labels
 
     @staticmethod
     def _sent_mask(sent_ids):

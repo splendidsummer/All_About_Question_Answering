@@ -5,18 +5,18 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class CharCNN(nn.Module):
-    def __init__(self, in_ch, out_ch, max_char_length, kernel_size=5):
+    def __init__(self, in_ch, out_ch, max_word_length, char_embed_size, kernel_size=5):
         super(CharCNN, self).__init__()
-        self.conv = nn.Conv1d(in_channels=in_ch, out_channels=out_ch, kernel_size=kernel_size)
-        self.maxpool = nn.MaxPool1d(max_char_length-kernel_size+1)
+        self.max_word_length = max_word_length
+        self.conv = nn.Conv2d(in_channels=1, out_channels=out_ch, kernel_size=(char_embed_size, kernel_size))
 
     def forward(self, input_char_tensor):
         """
         :param input_char_tensor:
         :return:
         """
-        conv_chars = self.conv(input_char_tensor)
-        conv_chars = self.maxpool(F.relu(conv_chars))
+        conv_chars = self.conv(input_char_tensor.permute(0, 1, 3, 2))
+        conv_chars = F.max_pool2d(F.relu(conv_chars))
 
         return conv_chars
 
@@ -262,7 +262,17 @@ class CharacterEmbeddingLayer(nn.Module):
 
 
 if __name__ == '__main__':
-    print(1111)
+    batch_size, seq_len, max_word_len, char_embed_size = 4, 15, 10, 8
+    inputs = torch.randn(batch_size, seq_len, max_word_len, char_embed_size)
+    charcnn = CharCNN(in_ch=char_embed_size, out_ch=100, max_word_length=max_word_len, char_embed_size=char_embed_size)
+    out = charcnn(inputs)
+
+    print(out.shape)
+    print(111)
+
+
+
+
 
 
 

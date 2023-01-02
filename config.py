@@ -25,8 +25,11 @@ vocab_path = './data/vocab_word2idx.pkl'
 char_vocab = './data/char2idx.pkl'
 train_df_path = './data/train_df.pkl'
 val_df_path = './data/dev_df.pkl'
-train_feature_path = './data/train_featurens.npz'
+train_feature_path = './data/train_features.npz'
 dev_feature_path = './data/dev_features.npz'
+idx2word_path = './data/vocab_idx2word.pkl'
+word2idx_path = './data/vocab_word2idx.pkl'
+
 
 # wandb configuration
 max_len_word = 25
