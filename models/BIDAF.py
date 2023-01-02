@@ -5,9 +5,10 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class CharCNN(nn.Module):
-    def __init__(self, in_ch, out_ch, max_word_length, char_embed_size, kernel_size=5):
+    def __init__(self, out_ch, max_word_length, char_embed_size, kernel_size=5):
         super(CharCNN, self).__init__()
         self.max_word_length = max_word_length
+        # applying kernel_size on sequence length
         self.conv = nn.Conv2d(in_channels=1, out_channels=out_ch, kernel_size=(char_embed_size, kernel_size))
 
     def forward(self, input_char_tensor):
@@ -16,16 +17,14 @@ class CharCNN(nn.Module):
         :return:
         """
         conv_chars = self.conv(input_char_tensor.permute(0, 1, 3, 2))
-        conv_chars = F.max_pool2d(F.relu(conv_chars))
-
         return conv_chars
 
 
 class Highway(nn.Module):
     def __init__(self, num_layers, embed_size):
         super(Highway, self).__init__()
-        self.transformers = nn.ModuleList([nn.Linear(embed_size, embed_size) for _ in range(num_layers)])
-        self.gates = nn.ModuleList([nn.Linear(embed_size, embed_size) for _ in range(num_layers)])
+        self.transformers = nn.ModuleList([nn.Linear(2*embed_size, 2*embed_size) for _ in range(num_layers)])
+        self.gates = nn.ModuleList([nn.Linear(2*embed_size, 2*embed_size) for _ in range(num_layers)])
 
     def forward(self, inputs):
         for gate, transform in zip(self.gates, self.transformers):
@@ -44,22 +43,40 @@ class Embedding(nn.Module):
         assert glove_vectors.size(1) == embed_size, 'pretrained wording embedding size' \
                                                     ' conflicts with designated embedding size.'
 
+        self.char_embed_size = char_embed_size
+        self.embed_size = glove_vectors.size(1)
+
         self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
         self.cembed = nn.Embedding(char_vocab_size, char_embed_size, padding_idx=1)
         self.proj = nn.Linear(embed_size, hidden_size, bias=False)
         self.cnn = CharCNN(char_embed_size, embed_size, max_word_length)
+
         self.dropout = nn.Dropout(drop_prob)
         self.highway = Highway(2, embed_size)  # using 2 highway layers
 
     def forward(self, word_tensors, char_tensors):
-
+        batch_size = char_tensors.size(0)
         word_embed = self.wembed(word_tensors)
         word_embed = self.dropout(word_embed)
+        word_embed = self.proj(word_embed)
 
         char_embed = self.cembed(char_tensors)
-        char_embed = self.cnn(char_embed)
+        char_embed = self.dropout(char_embed)
 
+        # char_embed.shape = [bs*seq_len, char_embed_size=8, max_word_len]
+        char_embed = char_embed.view(-1, self.char_embed_size, char_embed.size(2)).unsqueeze(1)
+        # char_embed.shape = [bs*seq_len, out_channels=100, 1, max_word_len-kernel_size+1]
+        char_embed = self.cnn(char_embed)
+        # char_embed.shape = [bs*seq_len, out_channels=100, max_word_len-kernel_size+1]
+        char_embed = char_embed.squeeze()
+
+        # shape before squeeze = [bs*seq_len, out_channels=100, 1], after squeeze = [bs*seq_len, out_channels=100]
+        char_embed = F.max_pool1d(char_embed, char_embed.size(2)).squeeze()
+        # char_embed.shape = [bs, seq_len, out_channels=100]
+        char_embed = char_embed.view(batch_size, -1, self.embed_size)
+        # embed.shape = [bs, seq_len, embed_size*2]
         embed = torch.concat([word_embed, char_embed], dim=-1)
+        # embed.shape = [bs, seq_len, embed_size]
         embed = self.highway(embed)
 
         return embed
@@ -203,62 +220,62 @@ class BiDAF(nn.Module):
         return start_pos, end_pos
 
 
-class CharacterEmbeddingLayer(nn.Module):
-
-    def __init__(self, char_vocab_dim, char_emb_dim, num_output_channels, kernel_size):
-        super().__init__()
-
-        self.char_emb_dim = char_emb_dim
-
-        self.char_embedding = nn.Embedding(char_vocab_dim, char_emb_dim, padding_idx=1)
-
-        self.char_convolution = nn.Conv2d(in_channels=1, out_channels=100, kernel_size=kernel_size)
-
-        self.relu = nn.ReLU()
-
-        self.dropout = nn.Dropout(0.2)
-
-    def forward(self, x):
-        # x = [bs, seq_len, word_len]
-        # returns : [batch_size, seq_len, num_output_channels]
-        # the output can be thought of as another feature embedding of dim 100.
-
-        batch_size = x.shape[0]
-
-        x = self.dropout(self.char_embedding(x))
-        # x = [bs, seq_len, word_len, char_emb_dim]
-
-        # following three operations manipulate x in such a way that
-        # it closely resembles an image. this format is important before
-        # we perform convolution on the character embeddings.
-
-        x = x.permute(0, 1, 3, 2)
-        # x = [bs, seq_len, char_emb_dim, word_len]
-
-        x = x.view(-1, self.char_emb_dim, x.shape[3])
-        # x = [bs*seq_len, char_emb_dim, word_len]
-
-        x = x.unsqueeze(1)
-        # x = [bs*seq_len, 1, char_emb_dim, word_len]
-
-        # x is now in a format that can be accepted by a conv layer.
-        # think of the tensor above in terms of an image of dimension
-        # (N, C_in, H_in, W_in).
-
-        x = self.relu(self.char_convolution(x))
-        # x = [bs*seq_len, out_channels, H_out, W_out]
-
-        x = x.squeeze()
-        # x = [bs*seq_len, out_channels, W_out]
-
-        x = F.max_pool1d(x, x.shape[2]).squeeze()
-        # x = [bs*seq_len, out_channels, 1] => [bs*seq_len, out_channels]
-
-        x = x.view(batch_size, -1, x.shape[-1])
-        # x = [bs, seq_len, out_channels]
-        # x = [bs, seq_len, features] = [bs, seq_len, 100]
-
-        return x
+# class CharacterEmbeddingLayer(nn.Module):
+#
+#     def __init__(self, char_vocab_dim, char_emb_dim, num_output_channels, kernel_size):
+#         super().__init__()
+#
+#         self.char_emb_dim = char_emb_dim
+#
+#         self.char_embedding = nn.Embedding(char_vocab_dim, char_emb_dim, padding_idx=1)
+#
+#         self.char_convolution = nn.Conv2d(in_channels=1, out_channels=100, kernel_size=kernel_size)
+#
+#         self.relu = nn.ReLU()
+#
+#         self.dropout = nn.Dropout(0.2)
+#
+#     def forward(self, x):
+#         # x = [bs, seq_len, word_len]
+#         # returns : [batch_size, seq_len, num_output_channels]
+#         # the output can be thought of as another feature embedding of dim 100.
+#
+#         batch_size = x.shape[0]
+#
+#         x = self.dropout(self.char_embedding(x))
+#         # x = [bs, seq_len, word_len, char_emb_dim]
+#
+#         # following three operations manipulate x in such a way that
+#         # it closely resembles an image. this format is important before
+#         # we perform convolution on the character embeddings.
+#
+#         x = x.permute(0, 1, 3, 2)
+#         # x = [bs, seq_len, char_emb_dim, word_len]
+#
+#         x = x.view(-1, self.char_emb_dim, x.shape[3])
+#         # x = [bs*seq_len, char_emb_dim, word_len]
+#
+#         x = x.unsqueeze(1)
+#         # x = [bs*seq_len, 1, char_emb_dim, word_len]
+#
+#         # x is now in a format that can be accepted by a conv layer.
+#         # think of the tensor above in terms of an image of dimension
+#         # (N, C_in, H_in, W_in).
+#
+#         x = self.relu(self.char_convolution(x))
+#         # x = [bs*seq_len, out_channels, H_out, W_out]
+#
+#         x = x.squeeze()
+#         # x = [bs*seq_len, out_channels, W_out]
+#
+#         x = F.max_pool1d(x, x.shape[2]).squeeze()
+#         # x = [bs*seq_len, out_channels, 1] => [bs*seq_len, out_channels]
+#
+#         x = x.view(batch_size, -1, x.shape[-1])
+#         # x = [bs, seq_len, out_channels]
+#         # x = [bs, seq_len, features] = [bs, seq_len, 100]
+#
+#         return x
 
 
 if __name__ == '__main__':

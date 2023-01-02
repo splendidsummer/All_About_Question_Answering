@@ -46,8 +46,8 @@ wandb_config = {
     'learning_rate': 0.5,
     'drop_prob': 0.2,
     'hidden_size': 100,
-    'char_channel_width': 5,
-    'char_channel_size': 100,
+    'charcnn_kernel_size': 5,
+    # 'char_channel_size': 100,
     'cuda': True,
     'pretrained': False,
     }
