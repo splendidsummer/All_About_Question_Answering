@@ -185,7 +185,7 @@ class ModelingLayer(nn.Module):
 
 
 class Output(nn.Module):
-    def __init__(self, hidden_size, drop_rate):
+    def __init__(self, hidden_size):
         super(Output, self).__init__()
         self.output_start = nn.Linear(hidden_size*10, 1, bias=False)
         self.output_end = nn.Linear(hidden_size*10, 1, bias=False)
@@ -194,7 +194,7 @@ class Output(nn.Module):
     def forward(self, global_hidden, modeling_out):
         # Here the inputs are actually come from outputs of modeling layer
         # Since bidirectional=True, out shape == [bs, context_len, hidden_size*2]
-        out, _ = self.end_lstm(global_hidden)
+        out, _ = self.end_lstm(modeling_out)
         start_pos = self.output_start(torch.cat([global_hidden, modeling_out], dim=-1)).squeeze()
         end_pos = self.output_end(torch.cat([global_hidden, out], dim=-1)).squeeze()
 
@@ -226,7 +226,7 @@ class BiDAF(nn.Module):
 
         self.modeling = ModelingLayer(hidden_size, drop_rate)
 
-        self.output = Output(hidden_size, drop_rate)
+        self.output = Output(hidden_size)
 
     def forward(self, context_words, context_chars, context_masks, context_lens,
                 query_words, query_chars, query_masks, query_lens):
@@ -289,15 +289,14 @@ if __name__ == '__main__':
     out_mask = torch.ones(4, 15).tril(0)
     qout_mask = torch.zeros(4, 10).tril(-1)
 
-    out = attention(out, out_mask, qout, qout_mask)
+    global_out = attention(out, out_mask, qout, qout_mask)
 
     model_layer = ModelingLayer(hidden_size=100, drop_rate=0.2)
+    out = model_layer(global_out)
+    output_layer = Output(100)
+    start_prob, end_prob = output_layer(global_out, out)
 
-    out = model_layer(out)
-
-    print(out.shape)
-
-
-    print(111)
+    print(111, start_prob.shape)
+    print(111, end_prob.shape)
 
 
