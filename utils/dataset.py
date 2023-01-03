@@ -35,8 +35,10 @@ class SquadDataset(Dataset):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         context_ids = [i for (i, _, _, _, _) in batch_datas]
+        context_lengths = self._get_seq_lengths(context_ids)
         context_char_ids = [i for (_, i, _, _, _) in batch_datas]
         question_ids = [i for (_, _, i, _, _) in batch_datas]
+        question_lengths = self._get_seq_lengths(question_ids)
         question_char_ids = [i for (_, _, _, i, _) in batch_datas]
         labels = torch.tensor([i for (_, _, _, _, i) in batch_datas], dtype=torch.long, device=device)
 
@@ -49,8 +51,11 @@ class SquadDataset(Dataset):
         context_masks = torch.tensor(self._sent_mask(context_ids), dtype=torch.long, device=device)
         question_masks = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
 
-        return padded_context, padded_context_char, padded_question, \
-                padded_question_char, context_masks, question_masks, labels
+        context_lengths = torch.tensor(context_lengths, dtype=torch.long, device=device)
+        question_lengths = torch.tensor(question_lengths, dtype=torch.long, device=device)
+
+        return padded_context, padded_context_char, padded_question, padded_question_char, context_masks, \
+               question_masks, labels, context_lengths, question_lengths
 
     @staticmethod
     def _sent_mask(sent_ids):
@@ -62,7 +67,10 @@ class SquadDataset(Dataset):
 
         return masks
 
-    def _get_seq_length(self,sent_ids):
+    @staticmethod
+    def _get_seq_lengths(self, sent_ids):
+        lengths = [len(sent) for sent in sent_ids]
+        return lengths
 
     def _pad_sent(self, sent_ids):
         sent_lens = [len(sent) for sent in sent_ids]
@@ -88,43 +96,43 @@ class SquadDataset(Dataset):
         return padded_chars
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    context = [
-        list(range(2)),
-        list(range(3)),
-        # list(range(8)),
-        # list(range(12))
-    ]
-
-    question = [
-        list(range(3)),
-        list(range(1)),
-        # list(range(8)),
-        # list(range(12))
-    ]
-
-    context_char = [
-        [list(range(5)), list(range(6))],
-        [list(range(8)), list(range(12)), list(range(6))]
-    ]
-
-    question_char = [
-        [list(range(4)), list(range(8)), list(range(12))],
-        [list(range(5))],
-        # list(range(8)),
-        # list(range(12))
-    ]
-
-    labels = [1, 2]
-
-    dataset = SquadDataset(context, context_char, question,
-                           question_char, labels)
-
-    dataloader = DataLoader(dataset, batch_size=2, collate_fn=dataset.batch_data_pro)
-
-    for data_batch in dataloader:
-        # assuming padded_context, padded_context_char, padded_question,
-        # padded_question_char, context_masks, question_mask
-        for item in data_batch:
-            print(item)
+    # context = [
+    #     list(range(2)),
+    #     list(range(3)),
+    #     # list(range(8)),
+    #     # list(range(12))
+    # ]
+    #
+    # question = [
+    #     list(range(3)),
+    #     list(range(1)),
+    #     # list(range(8)),
+    #     # list(range(12))
+    # ]
+    #
+    # context_char = [
+    #     [list(range(5)), list(range(6))],
+    #     [list(range(8)), list(range(12)), list(range(6))]
+    # ]
+    #
+    # question_char = [
+    #     [list(range(4)), list(range(8)), list(range(12))],
+    #     [list(range(5))],
+    #     # list(range(8)),
+    #     # list(range(12))
+    # ]
+    #
+    # labels = [1, 2]
+    #
+    # dataset = SquadDataset(context, context_char, question,
+    #                        question_char, labels)
+    #
+    # dataloader = DataLoader(dataset, batch_size=2, collate_fn=dataset.batch_data_pro)
+    #
+    # for data_batch in dataloader:
+    #     # assuming padded_context, padded_context_char, padded_question,
+    #     # padded_question_char, context_masks, question_mask
+    #     for item in data_batch:
+    #         print(item)

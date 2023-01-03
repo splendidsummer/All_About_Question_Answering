@@ -145,8 +145,8 @@ def train_one_epoch():
             print(f"Starting batch: {batch_count}")
         batch_count += 1
 
-        context, question, char_ctx, char_ques, ctx_masks, ques_mask, labels = batch
-        preds = model(context, question, char_ctx, char_ques, ctx_masks, ques_mask)
+        context, question, char_ctx, char_ques, ctx_masks, ques_masks, labels, ctx_lens, ques_lens = batch
+        preds = model(context, question, char_ctx, char_ques, ctx_masks, ques_masks, ctx_lens, ques_lens)
         start_pred, end_pred = preds
         s_idx, e_idx = labels[:, 0], labels[:, 1]
         loss = loss_fn(start_pred, s_idx) + loss_fn(end_pred, e_idx)
@@ -170,11 +170,11 @@ def valid_one_epoch():
         if batch_count % 100 == 0:
             print(f"Starting batch {batch_count}")
 
-        context, question, char_ctx, char_ques, context_mask, question_mask, labels = batch
+        context, question, char_ctx, char_ques, context_mask, question_masks, labels, ctx_lens, ques_lens = batch
 
         with torch.no_grad():
             s_idx, e_idx = labels[:, 0], labels[:, 1]
-            preds = model(context, question, char_ctx, char_ques, context_mask, question_mask)
+            preds = model(context, question, char_ctx, char_ques, context_mask, question_masks, ctx_lens, ques_lens)
             p1, p2 = preds
             loss = loss_fn(p1, s_idx) + loss_fn(p2, e_idx)
 

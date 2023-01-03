@@ -103,28 +103,36 @@ class Encoder(nn.Module):
         """
 
         total_len = inputs.size(1)
-        out = pack_padded_sequence(inputs, seq_lengths)
-        hiddens, _ = self.encoder(out)
-        hiddens = pad_packed_sequence(hiddens, batch_first=True, total_length=total_len)
-        hiddens = self.dropout(hiddens)
+        lengths, sort_idx = seq_lengths.sort(0, descending=True)
+        inputs = inputs[sort_idx]
+        out = pack_padded_sequence(inputs, lengths, batch_first=True)
+        out, _ = self.encoder(out)
+        out, _ = pad_packed_sequence(out, batch_first=True, total_length=total_len)
+        _, unsort_idx = sort_idx.sort(0)
+        out = out[unsort_idx]
 
-        return hiddens
+        out = self.dropout(out)
+
+        return out
 
 
 class Attention(nn.Module):
     def __init__(self, hidden_size, drop_rate):
         super(Attention, self).__init__()
-        self.attention = nn.Linear(hidden_size*3, 1)
+        self.attention = nn.Linear(hidden_size*6, 1)
         self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, context, context_mask, query, query_mask):
+    def forward(self, context, context_masks, query, query_masks):
         context = self.dropout(context)
         query = self.dropout(query)
 
+        # context_masks = context_masks.squeeze(-1)
+        # question_masks = query_masks.squeeze(1)
+
         batch_size, context_len, query_len = context.size(0), context.size(1), query.size(1)
 
-        context_ = context.unsequeeze(2).repeat(1, 1, query_len, 1)
-        query_ = query.unsequeeze(1).repeat(1, context_len, 1, 1)
+        context_ = context.unsqueeze(2).repeat(1, 1, query_len, 1)
+        query_ = query.unsqueeze(1).repeat(1, context_len, 1, 1)
 
         elementwise_prod = torch.mul(context_, query_)
 
@@ -133,17 +141,34 @@ class Attention(nn.Module):
 
         # sim_matrix.shape = [bs, context_len, query_len]
         sim_matrix = self.attention(cq).view(-1, context_len, query_len)
+
         alpha = F.softmax(sim_matrix, dim=-1)
+        print('alpha shape before masking', alpha.shape)
+
+        # content_masks.squeeze(2).shape = [bs, ctx_len, 1]
+        context_masks = context_masks.unsqueeze(-1)
+        # question_masks.squeeze(1).shape = [bs, 1, ques_len]
+        question_masks = query_masks.unsqueeze(1)
+
+        alpha = alpha * context_masks * question_masks
+
+        print('alpha shape before masking', alpha.shape)
 
         # [bs, context_len, query_len] * [bs, query_len, embed_size] ->
         # [bs, context_len, embed_size]
         a = torch.bmm(alpha, query)
-        q2c_sim_mat = torch.max(sim_matrix, dim=-1)  # maybe there is a problem??
+        q2c_sim_mat, _ = torch.max(sim_matrix, dim=-1)  # maybe there is a problem??
         # beta.shape = [bs, 1, context_len]
-        beta = F.softmax(q2c_sim_mat, dim=-1).unsqueeze(1)
-        b = torch.bmm(beta, context).repeat(1, context_len, 1)
+        beta = F.softmax(q2c_sim_mat, dim=-1)
+        #  [bs, 1, ctx_len] * [bs, 1, ctx_len]
+        beta = beta * context_masks.squeeze()
+        beta = beta.unsqueeze(1)
 
-        global_hidden = torch.concat([context, a, torch.mul(context, a), torch.mul(context, b)])
+        # beta.shape = [bs, 1, context_len]
+        b = torch.bmm(beta, context).repeat(1, context_len, 1)
+        c = torch.mul(context, a)
+        d = torch.mul(context, b)
+        global_hidden = torch.concat([context, a, c, d], dim=-1)
 
         return global_hidden
 
@@ -221,88 +246,58 @@ class BiDAF(nn.Module):
         return start_pos, end_pos
 
 
-# class CharacterEmbeddingLayer(nn.Module):
-#
-#     def __init__(self, char_vocab_dim, char_emb_dim, num_output_channels, kernel_size):
-#         super().__init__()
-#
-#         self.char_emb_dim = char_emb_dim
-#
-#         self.char_embedding = nn.Embedding(char_vocab_dim, char_emb_dim, padding_idx=1)
-#
-#         self.char_convolution = nn.Conv2d(in_channels=1, out_channels=100, kernel_size=kernel_size)
-#
-#         self.relu = nn.ReLU()
-#
-#         self.dropout = nn.Dropout(0.2)
-#
-#     def forward(self, x):
-#         # x = [bs, seq_len, word_len]
-#         # returns : [batch_size, seq_len, num_output_channels]
-#         # the output can be thought of as another feature embedding of dim 100.
-#
-#         batch_size = x.shape[0]
-#
-#         x = self.dropout(self.char_embedding(x))
-#         # x = [bs, seq_len, word_len, char_emb_dim]
-#
-#         # following three operations manipulate x in such a way that
-#         # it closely resembles an image. this format is important before
-#         # we perform convolution on the character embeddings.
-#
-#         x = x.permute(0, 1, 3, 2)
-#         # x = [bs, seq_len, char_emb_dim, word_len]
-#
-#         x = x.view(-1, self.char_emb_dim, x.shape[3])
-#         # x = [bs*seq_len, char_emb_dim, word_len]
-#
-#         x = x.unsqueeze(1)
-#         # x = [bs*seq_len, 1, char_emb_dim, word_len]
-#
-#         # x is now in a format that can be accepted by a conv layer.
-#         # think of the tensor above in terms of an image of dimension
-#         # (N, C_in, H_in, W_in).
-#
-#         x = self.relu(self.char_convolution(x))
-#         # x = [bs*seq_len, out_channels, H_out, W_out]
-#
-#         x = x.squeeze()
-#         # x = [bs*seq_len, out_channels, W_out]
-#
-#         x = F.max_pool1d(x, x.shape[2]).squeeze()
-#         # x = [bs*seq_len, out_channels, 1] => [bs*seq_len, out_channels]
-#
-#         x = x.view(batch_size, -1, x.shape[-1])
-#         # x = [bs, seq_len, out_channels]
-#         # x = [bs, seq_len, features] = [bs, seq_len, 100]
-#
-#         return x
-
-
 if __name__ == '__main__':
-    batch_size, seq_len, max_word_len, char_embed_size = 4, 15, 10, 8
+    batch_size, seq_len, qseq_len, max_word_len, char_embed_size = 4, 15, 10, 10, 8
+    lens = torch.tensor([3, 5, 6, 8], dtype=torch.long)
+    qlens = torch.tensor([7, 3, 5, 8])
+    # ques_lens = [4, 7, 2, ]
 
     inputs = torch.randn(batch_size, seq_len, max_word_len, char_embed_size)
+    qinputs = torch.randn(batch_size, qseq_len, max_word_len, char_embed_size)
+
     inputs = inputs.view(-1, char_embed_size, inputs.size(2)).unsqueeze(1)
+    qinputs = qinputs.view(-1, char_embed_size, qinputs.size(2)).unsqueeze(1)
+
     charcnn = CharCNN(out_ch=100, max_word_length=max_word_len, char_embed_size=char_embed_size)
+
     out = charcnn(inputs)
+    qout = charcnn(qinputs)
+
     out = out.squeeze()
+    qout = qout.squeeze()
 
     # shape before squeeze = [bs*seq_len, out_channels=100, 1], after squeeze = [bs*seq_len, out_channels=100]
     out = F.max_pool1d(out, out.size(2)).squeeze()
+    qout = F.max_pool1d(qout, qout.size(2)).squeeze()
     # char_embed.shape = [bs, seq_len, out_channels=100]
     out = out.view(batch_size, -1, 100)
+    qout = qout.view(batch_size, -1, 100)
+    out = torch.cat([out, out], dim=-1)
+    qout = torch.cat([qout, qout], dim=-1)
 
     highway = Highway(2, 100)
     out = highway(out)
+    qout = highway(qout)
 
+    encoder = Encoder(100, 100, 0.2)
+    out = encoder(out, lens)
+    qout = encoder(qout, lens)
+
+    # attention 需要考虑mask, 记得最后的start_idx & end_idx 也需要考虑mask
+    attention = Attention(hidden_size=100, drop_rate=0.2)
+
+    out_mask = torch.ones(4, 15).tril(0)
+    qout_mask = torch.zeros(4, 10).tril(-1)
+
+    out = attention(out, out_mask, qout, qout_mask)
+
+    model_layer = ModelingLayer(hidden_size=100, drop_rate=0.2)
+
+    out = model_layer(out)
 
     print(out.shape)
+
+
     print(111)
-
-
-
-
-
 
 

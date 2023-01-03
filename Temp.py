@@ -3,6 +3,9 @@ from torch.utils.data import Dataset
 import torch, json
 from torch import nn
 import config
+import torch.nn.functional as F
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+idx2word = {1: 'my', 2: 'book'}
 
 
 ###############################################################
@@ -103,6 +106,16 @@ ground_truths = evaluate()
 print(ground_truths)
 
 
+def _sent_mask(sent_ids):
+    sent_lens = [len(sent) for sent in sent_ids]
+    max_len = max(sent_lens)
+    masks = torch.zeros((len(sent_ids), max_len))
+    for i, length in enumerate(sent_lens):
+        masks[i, : length] = 1
+
+    return masks
+
+
 def valid(model, valid_dataset):
     print("Starting validation .........")
 
@@ -156,4 +169,60 @@ def valid(model, valid_dataset):
 
     em, f1 = evaluate(predictions)
     return valid_loss / len(valid_dataset), em, f1
+
+
+if __name__ == '__main__':
+    ques_lst = [[1, 1, 1, 1, 1, 1, 0, 0, 0]]
+    ctx_lst = [[1], [1], [1], [1], [1], [1], [0], [0], [0]]
+
+    inputs = torch.ones(9, 9)
+    masked_inputs = inputs * torch.tensor(ctx_lst)
+    # print(masked_inputs)
+
+    masked_inputs = masked_inputs * torch.tensor(ques_lst)
+    # print(masked_inputs)
+    sent_ids = [list(range(5)), list(range(4)), list(range(10)), list(range(5))]
+    sent_mask = _sent_mask(sent_ids)
+    print(sent_mask)
+
+    # beta.shape = [bs, ctx_len, ques_len]
+    # question_masks.shape = [bs, ques_len]
+    # question_masks.squeeze(1).shape = [bs, 1, ques_len]
+    # content_masks.shape = [bs, ctx_len]
+    # content_masks.squeeze(2).shape = [bs, ctx_len, 1]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
