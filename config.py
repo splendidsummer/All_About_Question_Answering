@@ -11,7 +11,7 @@ exp = "_" + now
 
 # data directories
 train_file = '../data/train-v2.0.json'
-dev_file = '../data/dev-v2.0.json'
+dev_file = './data/dev-v2.0.json'
 data_dir = "../data/"
 glove_path = './data/glove.6B.100d.txt'
 

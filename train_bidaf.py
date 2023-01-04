@@ -6,8 +6,17 @@ from models.BIDAF import *
 from torch import optim
 import os, sys, time, tqdm, datetime, pickle, json
 from utils.dataset import *
+import logging
 
-setup_seed(168)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+logger.info("device: {}, n_gpu: {}, 16-bits training: {}".format(
+    device, n_gpu, args.fp16))
+
+setup_seed(3407)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 now = datetime.datetime.now()
 now = now.strftime('%Y%m%d%H%M%S')
@@ -123,7 +132,8 @@ def evaluate(predictions):
                 if qa['id'] not in predictions:
                     continue
 
-                ground_truths = list(map(lambda x: x['text'], qa['answers']))
+                ground_truths = list(map(lambda x: x['text'].lower(), qa['answers']))
+
                 prediction = predictions[qa['id']]
                 exact_match += metric_max_over_ground_truths(exact_match_score, prediction, ground_truths)
                 f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
@@ -201,6 +211,7 @@ def valid_one_epoch():
 
         batch_count += 1
 
+    # 这里的问题是原始的answer里面是否去除了特殊字符， 是否都更改成了小写
     em, f1 = evaluate(predictions)
     return valid_loss / len(valset), em, f1
 

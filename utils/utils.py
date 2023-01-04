@@ -1,10 +1,48 @@
+from typing import Tuple, List, Any
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import pickle, json, os, random
+import pickle, json, os, random, re
 from mpl_toolkits.axes_grid1 import ImageGrid
 import shutil, wandb, torch, string
-from collections import  Counter
+from collections import Counter
+
+
+def load_json(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        content = json.load(f)
+    return content
+
+
+def print_samples(data: dict) -> Tuple[List[Any], List[Any], List[List[Any]]]:
+    data = data['data']
+    context_lst = []
+    ans_lst = []
+    question_lst = []
+    for element in data[:1]:
+        for para in element['paragraphs'][:1]:
+            context = para['context']
+            for qa_pair in para['qas']:
+                id = qa_pair['id']
+                question = qa_pair['question']
+                ans = qa_pair['answers']
+
+                an_lst = []
+                for an in ans:
+                    answer = an['text']
+                    an_lst.append(answer)
+                    print('context is: ', '\n',  context)
+                    print('question is: ', '\n', question)
+                    print('answer is: ', '\n', answer)
+
+                context_lst.append(context)
+                question_lst.append(question)
+                if an_lst is None:
+                    an_lst.append([' ', ' ', ' ', ' '])
+                else:
+                    ans_lst.append(an_lst)
+
+    return context_lst, question_lst, ans_lst
 
 
 def setup_seed(seed):
@@ -16,10 +54,10 @@ def setup_seed(seed):
 
 
 def normalize_answer(s):
-    '''
+    """
     Performs a series of cleaning steps on the ground truth and
     predicted answer.
-    '''
+    """
 
     def remove_articles(text):
         return re.sub(r'\b(a|an|the)\b', ' ', text)

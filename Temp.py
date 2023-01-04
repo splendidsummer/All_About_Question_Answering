@@ -185,12 +185,7 @@ if __name__ == '__main__':
     sent_mask = _sent_mask(sent_ids)
     print(sent_mask)
 
-    # beta.shape = [bs, ctx_len, ques_len]
-    # question_masks.shape = [bs, ques_len]
-    # question_masks.squeeze(1).shape = [bs, 1, ques_len]
-    # content_masks.shape = [bs, ctx_len]
-    # content_masks.squeeze(2).shape = [bs, ctx_len, 1]
-
+    token1 = ['my', ]
 
 
 

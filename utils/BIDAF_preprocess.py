@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import config
 import nltk, spacy
-import torch
 from collections import Counter
 nlp = spacy.load('en_core_web_sm')
 
