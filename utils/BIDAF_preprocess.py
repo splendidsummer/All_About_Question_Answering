@@ -4,8 +4,6 @@ import numpy as np
 import config
 import nltk, spacy
 from collections import Counter
-
-
 nlp = spacy.load('en_core_web_sm')
 
 

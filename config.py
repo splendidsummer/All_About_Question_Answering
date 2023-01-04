@@ -13,6 +13,7 @@ exp = "_" + now
 train_file = '../data/train-v2.0.json'
 dev_file = './data/dev-v2.0.json'
 data_dir = "../data/"
+full_data_dir = '../data/no_answer/'
 glove_path = './data/glove.6B.100d.txt'
 
 # model paths
