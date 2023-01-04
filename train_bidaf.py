@@ -212,8 +212,6 @@ def valid_one_epoch():
         batch_count += 1
 
     # 这里的问题是原始的answer里面是否去除了特殊字符， 是否都更改成了小写
-    em, f1 = evaluate(predictions)
-    return valid_loss / len(valset), em, f1
 
 
 def train():
@@ -252,6 +250,10 @@ def train():
         print(f"Epoch EM: {em}")
         print(f"Epoch F1: {f1}")
         print("====================================================================================")
+
+        em, f1 = evaluate(predictions)
+        return valid_loss / len(valset), em, f1
+
 
     wandb.save(model)
 

@@ -29,7 +29,3 @@ for context, question, an in zip(context_lst, question_lst, ans_lst):
         print('answer is: ', ' '.join(answer))
 
 
-
-# answer_tokens = [w.text for w in nlp(row['answer'], disable=['parser', 'tagger', 'ner'])]
-# Model estimates of probability of no answer.
-

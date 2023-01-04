@@ -4,6 +4,8 @@ import numpy as np
 import config
 import nltk, spacy
 from collections import Counter
+
+
 nlp = spacy.load('en_core_web_sm')
 
 
@@ -325,5 +327,7 @@ if __name__ == '__main__':
     glove_path = config.glove_path
     glove_dict = load_pretrain_embedding(glove_path)
     embedding_matrix = create_embedding_matrix(word2idx, glove_dict)
+
+
 
 
