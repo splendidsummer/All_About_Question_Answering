@@ -9,7 +9,7 @@ from datasets import load_dataset, load_metric
 from datasets import ClassLabel, Sequence
 nlp = spacy.load('en_core_web_sm')
 from BIDAF_preprocess import gather_text, build_word_vocab, build_char_vocab, \
-    get_error_indices, index_answer, postprocess_df, save_features
+     postprocess_df, save_noanswer_features
 
 
 def create_df(dataset_type='train'):
@@ -27,16 +27,16 @@ def create_df(dataset_type='train'):
     return df
 
 
-def preprocess_df(df):
+def preprocess_noanswer_df(df):
 
     def to_lower(text):
         return text.lower()
 
     df.context = df.context.apply(to_lower)
     df.question = df.question.apply(to_lower)
-    df['answer'] = df.answers.apply(lambda an: an['text'].lower())
-    df['label'] = df.answers.apply(lambda an: [0 if an['text'] is not None else an['answer_start'],
-                                               0 if an['text'] is not None else an['answer_start'] + len(an['text'])])
+    df['answer'] = df.answers.apply(lambda an: an['text'][0].lower() if len(an['text']) != 0 else '')
+    df['label'] = df.answers.apply(lambda an: [0 if len(an['text']) == 0 else an['answer_start'][0],
+                                               0 if len(an['text']) == 0 else an['answer_start'][0] + len(an['text'])])
     df.drop(columns=['answers'])
 
     return df
@@ -47,6 +47,9 @@ if __name__ == '__main__':
     dev_path = config.dev_file
     train_df = create_df()
     dev_df = create_df('validation')
+    train_df = preprocess_noanswer_df(train_df)
+    dev_df = preprocess_noanswer_df(dev_df)
+
     vocab_text = gather_text(train_df, dev_df)
     word2idx, idx2word, _ = build_word_vocab(vocab_text)
     char2idx, idx2char, _ = build_char_vocab(vocab_text)
@@ -67,7 +70,7 @@ if __name__ == '__main__':
     dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx, prex_filename='dev')
     dev_df.to_pickle(config.full_data_dir + f'dev_df.pkl')
 
-    save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
-                  train_df.question_char_ids, train_df.label_ids)
-    save_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
-                  dev_df.question_char_ids, dev_df.label_ids, prex='dev')
+    save_noanswer_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
+                           train_df.question_char_ids, train_df.label_ids)
+    save_noanswer_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
+                           dev_df.question_char_ids, dev_df.label_ids, prex='dev')

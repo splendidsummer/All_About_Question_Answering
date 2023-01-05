@@ -24,10 +24,18 @@ glove = "./glove_embeddings/" + "glove.6B.{}d.txt"
 glove_mat_path = './data/glove_embedding_matrix.pkl'
 vocab_path = './data/vocab_word2idx.pkl'
 char_vocab = './data/char2idx.pkl'
+
 train_df_path = './data/train_df.pkl'
-val_df_path = './data/dev_df.pkl'
+train_df_noanswer_path = './data/no_answer/train_df.pkl'
+dev_df_path = './data/dev_df.pkl'
+dev_df_noanswer_path = './data/no_answer/dev_df.pkl'
+
 train_feature_path = './data/train_features.npz'
+train_feature_noanswer_path = './data/no_answer/train_features.npz'
+
 dev_feature_path = './data/dev_features.npz'
+dev_feature_noanswer_path = './data/no_answer/dev_features.npz'
+
 idx2word_path = './data/vocab_idx2word.pkl'
 word2idx_path = './data/vocab_word2idx.pkl'
 

@@ -16,6 +16,9 @@ import sys
 
 OPTS = None
 
+from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
+
+model = AutoModelForQuestionAnswering
 
 def parse_args():
     parser = argparse.ArgumentParser('Official evaluation script for SQuAD version 2.0.')

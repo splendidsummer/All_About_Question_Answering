@@ -7,8 +7,9 @@ import nltk
 
 class SquadDataset(Dataset):
     def __init__(self, context_ids, context_char_ids, question_ids,
-                 question_char_ids, labels, padding_idx=1, char_padding_idx=1):
+                 question_char_ids, labels, ids, padding_idx=1, char_padding_idx=1):
         # super(SquadDataset, self).__init__()
+        self.ids = ids
         self.context_ids = context_ids
         self.context_char_ids = context_char_ids
         self.question_ids = question_ids
@@ -25,8 +26,9 @@ class SquadDataset(Dataset):
         question_id = self.question_ids[index]
         question_char_id = self.question_char_ids[index]
         label = self.labels[index]
+        identity = self.ids[index]
 
-        return context_id, context_char_id, question_id, question_char_id, label
+        return context_id, context_char_id, question_id, question_char_id, label, identity
 
     def __len__(self):
         return len(self.context_ids)
@@ -34,13 +36,14 @@ class SquadDataset(Dataset):
     def batch_data_pro(self, batch_datas):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        context_ids = [i for (i, _, _, _, _) in batch_datas]
+        context_ids = [i for (i, _, _, _, _, _) in batch_datas]
         context_lengths = self._get_seq_lengths(context_ids)
-        context_char_ids = [i for (_, i, _, _, _) in batch_datas]
-        question_ids = [i for (_, _, i, _, _) in batch_datas]
+        context_char_ids = [i for (_, i, _, _, _, _) in batch_datas]
+        question_ids = [i for (_, _, i, _, _, _) in batch_datas]
         question_lengths = self._get_seq_lengths(question_ids)
-        question_char_ids = [i for (_, _, _, i, _) in batch_datas]
-        labels = torch.tensor([i for (_, _, _, _, i) in batch_datas], dtype=torch.long, device=device)
+        question_char_ids = [i for (_, _, _, i, _, _) in batch_datas]
+        labels = torch.tensor([i for (_, _, _, _, i, _) in batch_datas], dtype=torch.long, device=device)
+        ids = [i for (_, _, _, _, _, i) in batch_datas]
 
         padded_context = torch.tensor(self._pad_sent(context_ids), dtype=torch.long, device=device)
         padded_context_char = torch.tensor(self._pad_char(context_char_ids), dtype=torch.long, device=device)
@@ -55,7 +58,7 @@ class SquadDataset(Dataset):
         question_lengths = torch.tensor(question_lengths, dtype=torch.long, device=device)
 
         return padded_context, padded_context_char, padded_question, padded_question_char, context_masks, \
-               question_masks, labels, context_lengths, question_lengths
+               question_masks, labels, context_lengths, question_lengths, ids
 
     @staticmethod
     def _sent_mask(sent_ids):

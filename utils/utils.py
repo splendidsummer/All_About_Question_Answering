@@ -6,6 +6,8 @@ import pickle, json, os, random, re
 from mpl_toolkits.axes_grid1 import ImageGrid
 import shutil, wandb, torch, string
 from collections import Counter
+import collections
+from datasets import load_dataset, load_metric
 
 
 def load_json(path):
@@ -45,7 +47,7 @@ def print_samples(data: dict) -> Tuple[List[Any], List[Any], List[List[Any]]]:
     return context_lst, question_lst, ans_lst
 
 
-def setup_seed(seed):
+def setup_seed(seed=3407):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
@@ -129,6 +131,34 @@ def epoch_time(start_time, end_time):
     return elapsed_mins, elapsed_secs
 
 
+def evaluate_bert_metric(predictions):
+    """
+
+    :param predictions:
+    :return:
+        {'exact': 71.58258232965552,
+     'f1': 75.0429473498408,
+     'total': 11873,
+     'HasAns_exact': 71.72739541160594,
+     'HasAns_f1': 78.65804890092097,
+     'HasAns_total': 5928,
+     'NoAns_exact': 71.43818334735072,
+     'NoAns_f1': 71.43818334735072,
+     'NoAns_total': 5945,
+     'best_exact': 71.58258232965552,
+     'best_exact_thresh': 0.0,
+     'best_f1': 75.04294734984086,
+     'best_f1_thresh': 0.0}
+
+    """
+
+    datasets = load_dataset("squad_v2")
+    metric = load_metric("squad_v2")
+    predictions = [{"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()]
+    references = [{"id": ex["id"], "answers": ex["answers"]} for ex in datasets["validation"]]
+    metric.compute(predictions=predictions, references=references)
+
+
 
 def make_qid_to_has_ans(dataset):
     qid_to_has_ans = {}
@@ -137,26 +167,6 @@ def make_qid_to_has_ans(dataset):
             for qa in p['qas']:
                 qid_to_has_ans[qa['id']] = bool(qa['answers'])
     return qid_to_has_ans
-
-
-def normalize_answer(s):
-    """Lower text and remove punctuation, articles and extra whitespace."""
-
-    def remove_articles(text):
-        regex = re.compile(r'\b(a|an|the)\b', re.UNICODE)
-        return re.sub(regex, ' ', text)
-
-    def white_space_fix(text):
-        return ' '.join(text.split())
-
-    def remove_punc(text):
-        exclude = set(string.punctuation)
-        return ''.join(ch for ch in text if ch not in exclude)
-
-    def lower(text):
-        return text.lower()
-
-    return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
 def get_tokens(s):
@@ -242,4 +252,90 @@ def make_eval_dict(exact_scores, f1_scores, qid_list=None):
 def merge_eval(main_eval, new_eval, prefix):
     for k in new_eval:
         main_eval['%s_%s' % (prefix, k)] = new_eval[k]
+
+
+def evaluate(predictions):
+    '''
+    Gets a dictionary of predictions with question_id as key
+    and prediction as value. The validation dataset has multiple
+    answers for a single question. Hence we compare our prediction
+    with all the answers and choose the one that gives us
+    the maximum metric (em or f1).
+    This method first parses the JSON file, gets all the answers
+    for a given id and then passes the list of answers and the
+    predictions to calculate em, f1.
+
+
+    :param dict predictions
+    Returns
+    : exact_match: 1 if the prediction and ground truth
+      match exactly, 0 otherwise.
+    : f1_score:
+    '''
+
+    with open('./data/dev-v2.0.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    data = data['data']   # dataset is a list object
+    f1 = exact_match = total = 0
+    for article in data:
+        for paragraph in article['paragraphs']:
+            for qa in paragraph['qas']:
+                total += 1
+                if qa['id'] not in predictions:
+                    continue
+
+                ground_truths = list(map(lambda x: x['text'].lower(), qa['answers']))
+
+                prediction = predictions[qa['id']]
+                exact_match += metric_max_over_ground_truths(exact_match_score, prediction, ground_truths)
+                f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
+
+    exact_match = 100.0 * exact_match / total
+    f1 = 100.0 * f1 / total
+
+    return exact_match, f1
+
+
+#
+# def find_n_best(output, n_best_size):
+#     start_logits = output.start_logits[0].cpu().numpy()
+#     end_logits = output.end_logits[0].cpu().numpy()
+#     offset_mapping = validation_features[0]["offset_mapping"]
+#     # The first feature comes from the first example. For the more general case, we will need to be match the example_id to
+#     # an example index
+#     context = datasets["validation"][0]["context"]
+#
+#     # Gather the indices the best start/end logits:
+#     start_indexes = np.argsort(start_logits)[-1: -n_best_size - 1: -1].tolist()
+#     end_indexes = np.argsort(end_logits)[-1: -n_best_size - 1: -1].tolist()
+#     valid_answers = []
+#     for start_index in start_indexes:
+#         for end_index in end_indexes:
+#             # Don't consider out-of-scope answers, either because the indices are out of bounds or correspond
+#             # to part of the input_ids that are not in the context.
+#             if (
+#                     start_index >= len(offset_mapping)
+#                     or end_index >= len(offset_mapping)
+#                     or offset_mapping[start_index] is None
+#                     or offset_mapping[end_index] is None
+#             ):
+#                 continue
+#             # Don't consider answers with a length that is either < 0 or > max_answer_length.
+#             if end_index < start_index or end_index - start_index + 1 > max_answer_length:
+#                 continue
+#             if start_index <= end_index:  # We need to refine that test to check the answer is inside the context
+#                 start_char = offset_mapping[start_index][0]
+#                 end_char = offset_mapping[end_index][1]
+#                 valid_answers.append(
+#                     {
+#                         "score": start_logits[start_index] + end_logits[end_index],
+#                         "text": context[start_char: end_char]
+#                     }
+#                 )
+#
+#     valid_answers = sorted(valid_answers, key=lambda x: x["score"], reverse=True)[:n_best_size]
+#     return valid_answers
+#
+
 

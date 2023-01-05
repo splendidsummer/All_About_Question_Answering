@@ -279,6 +279,17 @@ def save_features(context_ids, context_char_ids, question_ids, question_char_ids
             )
 
 
+def save_noanswer_features(context_ids, context_char_ids, question_ids, question_char_ids, labels, prex='train'):
+    np.savez(
+                os.path.join(config.data_dir, f"{prex}_noanswer_features.npz"),
+                context_ids=np.array(context_ids),
+                context_char_ids=np.array(context_char_ids),
+                question_ids=np.array(question_ids),
+                question_char_ids=np.array(question_char_ids),
+                labels=np.array(labels)
+            )
+
+
 # def simplied_build_char_vocab(vocab_text):
 #
 #     chars = []
