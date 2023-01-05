@@ -93,10 +93,6 @@ def build_word_vocab(text):
     word2idx = {word: idx for idx, word in enumerate(word_vocab)}
     print(f"word2idx-length: {len(word2idx)}")
     idx2word = {v: k for k, v in word2idx.items()}
-    word2idx_file = config.data_dir + 'vocab_word2idx.pkl'
-    idx2word_file = config.data_dir + 'vocab_idx2word.pkl'
-    pickle.dump(word2idx, open(word2idx_file, 'wb'))
-    pickle.dump(idx2word, open(idx2word_file, 'wb'))
 
     return word2idx, idx2word, word_vocab
 
@@ -133,7 +129,6 @@ def get_error_indices(df, idx2word):
     err_idx = start_value_error + end_value_error + assert_error
     err_idx = set(err_idx)
     print(f"Number of error indices: {len(err_idx)}")
-
     return err_idx
 
 
@@ -159,16 +154,15 @@ def test_indices(df, idx2word):
     for index, row in df.iterrows():
 
         answer_tokens = [w.text for w in nlp(row['answer'], disable=['parser', 'tagger', 'ner'])]
-
-        start_token = answer_tokens[0]
-        end_token = answer_tokens[-1]
-
         context_span = [(word.idx, word.idx + len(word.text))
                         for word in nlp(row['context'], disable=['parser', 'tagger', 'ner'])]
 
         starts, ends = zip(*context_span)
 
         answer_start, answer_end = row['label']
+
+        if answer_start == answer_end == 0:
+            continue
 
         try:
             start_idx = starts.index(answer_start)
@@ -202,8 +196,10 @@ def index_answer(row, idx2word):
     starts, ends = zip(*context_span)
 
     answer_start, answer_end = row.label
-    start_idx = starts.index(answer_start)
+    if answer_start == answer_end == 0:
+        return [answer_start, answer_end]
 
+    start_idx = starts.index(answer_start)
     end_idx = ends.index(answer_end)
 
     ans_toks = [w.text for w in nlp(row.answer, disable=['parser', 'tagger', 'ner'])]
@@ -234,7 +230,6 @@ def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
     df_error = get_error_indices(df, idx2word)
     df.drop(df_error, inplace=True)
     df['lable_ids'] = df.apply(index_answer, axis=1, idx2word=idx2word)
-    df.to_pickle(config.data_dir + f'{prex_filename}_df.pkl')
 
     return df
 
