@@ -2,7 +2,7 @@ import json, pickle, re, os, string, typing, gc
 import pandas as pd
 import numpy as np
 import config
-import nltk, spacy
+import spacy
 from collections import Counter
 nlp = spacy.load('en_core_web_sm')
 
@@ -118,8 +118,8 @@ def build_char_vocab(vocab_text):
     char2idx_file = config.data_dir + 'char2idx.pkl'
     idx2char_file = config.data_dir + 'idx2char.pkl'
 
-    pickle.dump(char2idx, open(char2idx_file, 'wb'))
-    pickle.dump(idx2char, open(idx2char_file, 'wb'))
+    # pickle.dump(char2idx, open(char2idx_file, 'wb'))
+    # pickle.dump(idx2char, open(idx2char_file, 'wb'))
 
     return char2idx, idx2char, char_vocab
 
@@ -224,9 +224,12 @@ def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
         return ids
 
     df['context_ids'] = df.context.apply(text2ids, word2idx=word2idx)
+    df.to_csv('tmp_df.csv')
+
     df['question_ids'] = df.question.apply(text2ids, word2idx=word2idx)
     df['context_char_ids'] = df.context.apply(text2charids, char2idx=char2idx)
     df['question_char_ids'] = df.question.apply(text2charids, char2idx=char2idx)
+
     df_error = get_error_indices(df, idx2word)
     df.drop(df_error, inplace=True)
     df['label_ids'] = df.apply(index_answer, axis=1, idx2word=idx2word)
@@ -252,9 +255,11 @@ def create_embedding_matrix(word2idx, embedding_dict):
     embedding_dim = embedding_dict[list(embedding_dict.keys())[0]].shape[0]
     print('embedding dimension: ', embedding_dim)
     embedding_matrix = np.zeros((vocab_size + 2, embedding_dim))
+    num_valid_word = 0
     for word, idx in word2idx.items():
         if embedding_dict.get(word) is not None:
             embedding_matrix[idx] = embedding_dict[word]
+            num_valid_word += 1
         elif word == '<pad>':
             embedding_matrix[idx] = np.random.randn(1, embedding_dim)
 
@@ -264,6 +269,7 @@ def create_embedding_matrix(word2idx, embedding_dict):
 
     glove_mat_file = config.data_dir + 'glove_matrix.pkl'
     pickle.dump(embedding_matrix, open(glove_mat_file, 'wb'))
+    print('number of valid word is ', num_valid_word )
 
     return embedding_matrix
 
@@ -281,7 +287,7 @@ def save_features(context_ids, context_char_ids, question_ids, question_char_ids
 
 def save_noanswer_features(context_ids, context_char_ids, question_ids, question_char_ids, labels, prex='train'):
     np.savez(
-                os.path.join(config.data_dir, f"{prex}_noanswer_features.npz"),
+                os.path.join(config.full_data_dir, f"{prex}_features.npz"),
                 context_ids=np.array(context_ids),
                 context_char_ids=np.array(context_char_ids),
                 question_ids=np.array(question_ids),

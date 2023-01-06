@@ -46,7 +46,7 @@ wandb_config = {
     'char_embedding_size': 8,
     'max_len_context': 400,
     'max_len_question': 50,
-    'vocab_size': 94386,
+    'vocab_size': 97110,
     'char_vocab_size': 204,
     'max_len_word': max_len_word,
     'num_epochs': 12,  #
@@ -59,6 +59,13 @@ wandb_config = {
     'cuda': True,
     'pretrained': False,
 }
+
+# raw-vocab: 97108
+# vocab-length: 97110
+# word2idx-length: 97110
+# raw-char-vocab: 1310
+# char-vocab-intersect: 202
+# char2idx-length: 204
 
 # model saving path
 squad_models = "output/" + exp
