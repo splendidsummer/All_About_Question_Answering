@@ -1,5 +1,4 @@
-import config
-import wandb
+import config as cfg
 import numpy as np
 from utils.utils import *
 from models.BIDAF import *
@@ -9,12 +8,10 @@ from utils.dataset import *
 import logging
 from datasets import load_dataset, load_metric
 
-
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 setup_seed(3407)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -24,43 +21,44 @@ model_path = '/root/autodl-tmp/dl_project2/saved_model_' + now + '.pt'
 
 # initialize wandb logging to your project
 wandb.init(
-    job_type='Question_Answering_Squad2.0',
-    project="BiDAF_model",
+    job_type='BIDAF',
+    project='BIDAF_MODEL',
     dir='/root/autotmp-dl/All_About_Question_Answering/wandb/',
-    entity=config.TEAM_NAME,
-    config=config.wandb_config,
+    entity=cfg.TEAM_NAME,
+    config=cfg.wandb_config,
     # sync_tensorboard=True,
-    name='BiDAF Training',
-    notes='min_lr=0.00001',
+    name='bidaf debugging',
+    # notes='',
     ####
 )
-
 
 config = wandb.config
 batch_size = config.batch_size
 num_epochs = config.num_epochs
 lr = config.learning_rate
 weight_decay = config.weight_decay
-activation = config.activation
+# activation = config.activation
 embed_size = config.word_embedding_size
 char_embed_size = config.char_embedding_size
-max_word_length = config.max_word_length
+max_word_length = config.max_len_word
 hidden_size = config.hidden_size
 vocab_size = config.vocab_size
 char_vocab_size = config.char_vocab_size
-drop_rate = config.drop_rate
+drop_rate = config.drop_prob
 
+logger.info('Loading preprocessed data!!')
 
-with open(config.glove_mat_path, 'rb', encoding='utf-8') as f:
+with open(cfg.glove_mat_path, 'rb') as f:
     glove_vectors = pickle.load(f)
+glove_vectors = torch.tensor(glove_vectors, dtype=torch.float32)
 
-with open(config.idx2word_path, 'rb', encoding='utf-8') as f:
+with open(cfg.idx2word_noanswer_path, 'rb') as f:
     idx2word = pickle.load(f)
 
-with open(config.train_df_noanswer_path , 'rb', encoding='utf-8') as f:
+with open(cfg.train_df_noanswer_path, 'rb') as f:
     train_df = pickle.load(f)
 
-with open(config.dev_feature_noanswer_path, 'rb', encoding='utf-8') as f:
+with open(cfg.dev_df_noanswer_path, 'rb') as f:
     dev_df = pickle.load(f)
 
 # with open(config.train_df_path, 'rb', encoding='utf-8') as f:
@@ -70,16 +68,17 @@ with open(config.dev_feature_noanswer_path, 'rb', encoding='utf-8') as f:
 #     dev_df = pickle.load(f)
 
 # train_data = np.load(config.train_feature_path)
-train_data = np.load(config.train_feature_noanswer_path)  # using like a dict
+train_data = np.load(cfg.train_feature_noanswer_path, allow_pickle=True)  # using like a dict
 # dev_data = np.load(config.dev_feature_path)
-dev_data = np.load(config.dev_feature_noanswer_path)
+dev_data = np.load(cfg.dev_feature_noanswer_path, allow_pickle=True)
 
 train_data = [i for (_, i) in train_data.items()]
 dev_data = [i for (_, i) in dev_data.items()]
 
-train_ids = train_df.id
-dev_ids = dev_df.id
+train_ids = train_df.id.values
+dev_ids = dev_df.id.values
 
+logger.info('Building Training & Validation dataset!!')
 trainset = SquadDataset(*train_data, train_ids)
 valset = SquadDataset(*dev_data, dev_ids)
 
@@ -95,6 +94,7 @@ val_loader = DataLoader(valset,
                         collate_fn=valset.batch_data_pro
                         )
 
+logger.info('Building Model!!')
 
 model = BiDAF(glove_vectors, char_vocab_size, char_embed_size, embed_size,
               hidden_size, max_word_length, drop_rate).to(device)
@@ -107,23 +107,23 @@ optimizer = optim.Adadelta(model.parameters(),
                            # weight_decay= config.weight_decay
                            )
 
-
 loss_fn = nn.CrossEntropyLoss()
 
 
 def train_one_epoch():
-    print("Starting training ........")
+
     train_loss = 0.
     batch_count = 0
     model.train()
     for batch in train_loader:
         optimizer.zero_grad()
         if batch_count % 500 == 0:
-            print(f"Starting batch: {batch_count}")
+            logger.info(f"Starting batch: {batch_count}")
         batch_count += 1
 
-        context, question, char_ctx, char_ques, ctx_masks, ques_masks, labels, ctx_lens, ques_lens, _ = batch
-        preds = model(context, question, char_ctx, char_ques, ctx_masks, ques_masks, ctx_lens, ques_lens)
+        context, char_ctx, question, char_ques, ctx_masks, ques_masks, labels, ctx_lens, ques_lens, _ = batch
+        preds = model(context, char_ctx, ctx_masks, ctx_lens, question, char_ques,  ques_masks, ques_lens)
+
         start_pred, end_pred = preds
         s_idx, e_idx = labels[:, 0], labels[:, 1]
         loss = loss_fn(start_pred, s_idx) + loss_fn(end_pred, e_idx)
@@ -135,22 +135,22 @@ def train_one_epoch():
 
 
 def valid_one_epoch():
-    print("Starting validation .........")
     valid_loss = 0.
     batch_count = 0
 
     model.eval()
-    predictions = []
+    predictions = {}
 
     for batch in val_loader:
         if batch_count % 100 == 0:
-            print(f"Starting batch {batch_count}")
+            logger.info(f"Starting batch {batch_count}")
 
-        context, question, char_ctx, char_ques, context_mask, question_masks, labels, ctx_lens, ques_lens, ids = batch
+        context, char_ctx, question, char_ques, ctx_masks, ques_masks, labels, ctx_lens, ques_lens, ids = batch
 
         with torch.no_grad():
             s_idx, e_idx = labels[:, 0], labels[:, 1]
-            preds = model(context, question, char_ctx, char_ques, context_mask, question_masks, ctx_lens, ques_lens)
+            preds = model(context, char_ctx, ctx_masks, ctx_lens, question, char_ques, ques_masks, ques_lens)
+
             p1, p2 = preds
             loss = loss_fn(p1, s_idx) + loss_fn(p2, e_idx)
             valid_loss += loss.item()
@@ -189,14 +189,17 @@ def train():
     f1s = []
     wandb.watch(model)
 
+    logger.info('Start Training!!')
+
     for epoch in range(num_epochs):
-        print(f"Epoch {epoch + 1}")
+        # logger.info(f"Starting Training Epoch: {epoch}")
         start_time = time.time()
-
-        train_loss = train_one_epoch()
+        # train_loss = train_one_epoch()
+        train_loss = 0.0
+        logger.info(f"Starting Validation Epoch: {epoch}")
         valid_loss, em, f1, metric_result, predictions = valid_one_epoch()
-
         end_time = time.time()
+
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
 
         train_losses.append(train_loss)
@@ -210,17 +213,21 @@ def train():
                    'NoAns_exact': metric_result['HasAns_exact'], 'NoAns_f1': metric_result['NoAns_f1'],
                    'best_exact': metric_result['HasAns_exact'], 'best_f1': metric_result['best_f1'] })
 
-        print(f"Epoch train loss : {train_loss}| Time: {epoch_mins}m {epoch_secs}s")
-        print(f"Epoch valid loss: {valid_loss}")
-        print(f"Epoch EM: {em}")
-        print(f"Epoch F1: {f1}")
-        print("====================================================================================")
-
         em, f1 = evaluate(predictions)
-        return valid_loss / len(valset), em, f1
 
-    wandb.save(model)
-    torch.save(model.state_dict(), 'model.pth')  # possible to use .h5 file here??
-    wandb.save('model_' + now + '.h5')   # pth?? pt?? h5??
+        logger.info(f"Epoch train loss : {train_loss}| Time: {epoch_mins}m {epoch_secs}s")
+        logger.info(f"Epoch valid loss: {valid_loss}")
+        logger.info(f"Epoch EM: {em}")
+        logger.info(f"Epoch F1: {f1}")
+        logger.info("====================================================================================")
 
+    return valid_loss / len(valset), em, f1
+
+
+wandb.save('model.h5')
+torch.save(model, 'model.pth')  # possible to use .h5 file here??
+
+
+if __name__ == '__main__':
+    train()
 

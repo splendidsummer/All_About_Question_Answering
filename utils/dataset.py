@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import os, pickle, pdb
 import config
-import nltk
 
 
 class SquadDataset(Dataset):
@@ -54,8 +53,8 @@ class SquadDataset(Dataset):
         context_masks = torch.tensor(self._sent_mask(context_ids), dtype=torch.long, device=device)
         question_masks = torch.tensor(self._sent_mask(question_ids), dtype=torch.long, device=device)
 
-        context_lengths = torch.tensor(context_lengths, dtype=torch.long, device=device)
-        question_lengths = torch.tensor(question_lengths, dtype=torch.long, device=device)
+        context_lengths = torch.tensor(context_lengths, dtype=torch.long)
+        question_lengths = torch.tensor(question_lengths, dtype=torch.long)
 
         return padded_context, padded_context_char, padded_question, padded_question_char, context_masks, \
                question_masks, labels, context_lengths, question_lengths, ids
@@ -70,7 +69,7 @@ class SquadDataset(Dataset):
 
         return masks
 
-    @staticmethod
+    # @staticmethod
     def _get_seq_lengths(self, sent_ids):
         lengths = [len(sent) for sent in sent_ids]
         return lengths

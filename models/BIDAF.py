@@ -50,7 +50,7 @@ class Embedding(nn.Module):
         self.wembed = nn.Embedding.from_pretrained(glove_vectors, freeze=True)
         self.cembed = nn.Embedding(config.char_vocab_size, char_embed_size, padding_idx=1)
         self.proj = nn.Linear(embed_size, hidden_size, bias=False)
-        self.cnn = CharCNN(char_embed_size, embed_size, max_word_length)
+        self.cnn = CharCNN(embed_size, max_word_length, char_embed_size)
 
         self.dropout = nn.Dropout(drop_prob)
         self.highway = Highway(2, embed_size)  # using 2 highway layers
@@ -143,7 +143,7 @@ class Attention(nn.Module):
         sim_matrix = self.attention(cq).view(-1, context_len, query_len)
 
         alpha = F.softmax(sim_matrix, dim=-1)
-        print('alpha shape before masking', alpha.shape)
+        # print('alpha shape before masking', alpha.shape)
 
         # content_masks.squeeze(2).shape = [bs, ctx_len, 1]
         context_masks = context_masks.unsqueeze(-1)
@@ -152,7 +152,7 @@ class Attention(nn.Module):
 
         alpha = alpha * context_masks * question_masks
 
-        print('alpha shape before masking', alpha.shape)
+        # print('alpha shape before masking', alpha.shape)
 
         # [bs, context_len, query_len] * [bs, query_len, embed_size] ->
         # [bs, context_len, embed_size]

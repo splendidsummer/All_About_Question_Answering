@@ -4,7 +4,7 @@ now = datetime.datetime.now()
 now = now.strftime('%Y%m%d%H%M%S')
 
 # System setting
-TEAM_NAME = 'unicorn_upc_hle'
+TEAM_NAME = 'unicorn_upc_dl'
 
 # experiment ID
 exp = "_" + now
@@ -21,7 +21,7 @@ spacy_en = "/root/miniconda3/lib/python3.8/site-packages/en_core_web_sm/en_core_
 glove = "./glove_embeddings/" + "glove.6B.{}d.txt"
 
 # processed data file
-glove_mat_path = './data/glove_embedding_matrix.pkl'
+glove_mat_path = './data/glove_matrix.pkl'
 vocab_path = './data/vocab_word2idx.pkl'
 char_vocab = './data/char2idx.pkl'
 
@@ -37,7 +37,9 @@ dev_feature_path = './data/dev_features.npz'
 dev_feature_noanswer_path = './data/no_answer/dev_features.npz'
 
 idx2word_path = './data/vocab_idx2word.pkl'
+idx2word_noanswer_path = './data/no_answer/vocab_idx2word.pkl'
 word2idx_path = './data/vocab_word2idx.pkl'
+word2idx_noanswer_path = './data/no_answer/vocab_word2idx.pkl'
 
 # wandb configuration
 max_len_word = 25
@@ -50,7 +52,7 @@ wandb_config = {
     'char_vocab_size': 204,
     'max_len_word': max_len_word,
     'num_epochs': 12,  #
-    'batch_size': 60,
+    'batch_size': 32,
     'learning_rate': 0.5,
     'drop_prob': 0.2,
     'hidden_size': 100,
@@ -58,6 +60,7 @@ wandb_config = {
     # 'char_channel_size': 100,
     'cuda': True,
     'pretrained': False,
+    'weight_decay': 0.0001,
 }
 
 # raw-vocab: 97108

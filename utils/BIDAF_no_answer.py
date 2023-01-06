@@ -51,9 +51,9 @@ if __name__ == '__main__':
     dev_df = preprocess_noanswer_df(dev_df)
 
     #
-    # vocab_text = gather_text(train_df, dev_df)
-    # word2idx, idx2word, _ = build_word_vocab(vocab_text)
-    # char2idx, idx2char, _ = build_char_vocab(vocab_text)
+    vocab_text = gather_text(train_df, dev_df)
+    word2idx, idx2word, _ = build_word_vocab(vocab_text)
+    char2idx, idx2char, _ = build_char_vocab(vocab_text)
     #
     # word2idx_file = config.full_data_dir + 'vocab_word2idx.pkl'
     # idx2word_file = config.full_data_dir + 'vocab_idx2word.pkl'
