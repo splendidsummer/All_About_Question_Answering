@@ -229,7 +229,7 @@ def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
     df['question_char_ids'] = df.question.apply(text2charids, char2idx=char2idx)
     df_error = get_error_indices(df, idx2word)
     df.drop(df_error, inplace=True)
-    df['lable_ids'] = df.apply(index_answer, axis=1, idx2word=idx2word)
+    df['label_ids'] = df.apply(index_answer, axis=1, idx2word=idx2word)
 
     return df
 
