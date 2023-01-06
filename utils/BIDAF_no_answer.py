@@ -35,7 +35,7 @@ def preprocess_noanswer_df(df):
     df.context = df.context.apply(to_lower)
     df.question = df.question.apply(to_lower)
     df['answer'] = df.answers.apply(lambda an: an['text'][0].lower() if len(an['text']) != 0 else '')
-    df['label'] = df.answers.apply(lambda an: [0 if len(an['text']) == 0 else an['answer_start'][0],
+    df['label_ids'] = df.answers.apply(lambda an: [0 if len(an['text']) == 0 else an['answer_start'][0],
                                                0 if len(an['text']) == 0 else an['answer_start'][0] + len(an['text'])])
     df.drop(columns=['answers'])
 
