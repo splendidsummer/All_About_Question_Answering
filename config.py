@@ -53,7 +53,7 @@ wandb_config = {
     'vocab_size': 97110,
     'char_vocab_size': 204,
     'max_len_word': max_len_word,
-    'num_epochs': 12,  #
+    'num_epochs': 30,  #
     'batch_size': 32,
     'learning_rate': 0.5,
     'drop_prob': 0.2,
