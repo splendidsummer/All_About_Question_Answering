@@ -190,8 +190,6 @@ def valid_one_epoch():
 def train():
     train_losses = []
     valid_losses = []
-    ems = []
-    f1s = []
     wandb.watch(model)
 
     logger.info('Start Training!!')
@@ -215,13 +213,17 @@ def train():
         wandb.log({'epoch': epoch, 'train_loss': train_loss, 'val_loss': valid_loss,
                    'exact_match': metric_result['exact'], 'f1': metric_result['f1'],
                    'HasAns_exact': metric_result['HasAns_exact'], 'HasAns_f1': metric_result['HasAns_f1'],
-                   'NoAns_exact': metric_result['HasAns_exact'], 'NoAns_f1': metric_result['NoAns_f1'],
-                   'best_exact': metric_result['HasAns_exact'], 'best_f1': metric_result['best_f1'] })
+                   'NoAns_exact': metric_result['NoAns_exact'], 'NoAns_f1': metric_result['NoAns_f1'],
+                   'best_exact': metric_result['HasAns_exact'], 'best_f1': metric_result['best_f1']})
 
         logger.info(f"Epoch train loss : {train_loss}| Time: {epoch_mins}m {epoch_secs}s")
         logger.info(f"Epoch valid loss: {valid_loss}")
 
-        logger.info(f"Exact_match': {metric_result['exact']} | 'F1': {metric_result['f1']}")
+        logger.info(f"Exact_match: {metric_result['exact']} | F1: {metric_result['f1']}")
+        logger.info(f"HasAns_exact: {metric_result['HasAns_exact']} | HasAns_f1: {metric_result['HasAns_f1']}")
+        logger.info(f"NoAns_exact: {metric_result['NoAns_exact']} | NoAns_f1: {metric_result['NoAns_f1']}")
+        logger.info(f"best_exact: {metric_result['HasAns_exact']} | best_f1: {metric_result['best_f1']}")
+
         # logger.info()
 
         logger.info("====================================================================================")
