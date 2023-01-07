@@ -144,12 +144,12 @@ def pop_wrong_ids(path, references):
             print(line)
 
     for idn in wrong_ids:
-        references.pop(idn)
+        references = [i for i in references if i['id'] not in wrong_ids]
     assert len(references) == (11873-52)
     return references
 
 
-def evaluate_bert_metric(predictions):
+def evaluate_bert_metric(predictions, references):
     """
 
     :param predictions:
@@ -170,11 +170,8 @@ def evaluate_bert_metric(predictions):
 
     """
 
-    datasets = load_dataset("squad_v2")
     metric = load_metric("squad_v2")
     predictions = [{"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()]
-    references = [{"id": ex["id"], "answers": ex["answers"]} for ex in datasets["validation"]]
-    references = pop_wrong_ids(cfg.wrong_id_path, references)
     metric = metric.compute(predictions=predictions, references=references)
     return metric
 
@@ -357,4 +354,12 @@ def evaluate(predictions):
 #     return valid_answers
 #
 
+if __name__ == '__main__':
+    wrong_id_path = '../data/no_answer/wrong_ids.txt'
+    datasets = load_dataset("squad_v2")
+    references = [{"id": ex["id"], "answers": ex["answers"]} for ex in datasets["validation"]]
+    references = pop_wrong_ids(wrong_id_path, references)
 
+    pickle.dump(references, open('../data/no_answer/references.pkl', 'wb'))
+
+    print(111)

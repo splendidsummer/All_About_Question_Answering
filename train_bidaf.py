@@ -18,7 +18,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 now = datetime.datetime.now()
 now = now.strftime('%Y%m%d%H%M%S')
 model_path = '/root/autodl-tmp/dl_project2/saved_model_' + now + '.pt'
-wrong_id_path = cfg.wrong_id_path
+
 
 # initialize wandb logging to your project
 wandb.init(
@@ -61,6 +61,9 @@ with open(cfg.train_df_noanswer_path, 'rb') as f:
 
 with open(cfg.dev_df_noanswer_path, 'rb') as f:
     dev_df = pickle.load(f)
+
+with open(cfg.references_path,  'rb') as f:
+    references = pickle.load(f)
 
 # with open(config.train_df_path, 'rb', encoding='utf-8') as f:
 #     train_df = pickle.load(f)
@@ -178,9 +181,9 @@ def valid_one_epoch():
         batch_count += 1
 
     # em, f1 = evaluate(predictions)
-    metric_result = evaluate_bert_metric(predictions)
+    metric_result = evaluate_bert_metric(predictions, references)
 
-    return valid_loss, metric_result, predictions
+    return valid_loss / len(valset), metric_result, predictions
     # return valid_loss, em, f1, metric_result, predictions
 
 
@@ -194,10 +197,9 @@ def train():
     logger.info('Start Training!!')
 
     for epoch in range(num_epochs):
-        # logger.info(f"Starting Training Epoch: {epoch}")
+        logger.info(f"Starting Training Epoch: {epoch}")
         start_time = time.time()
-        # train_loss = train_one_epoch()
-        train_loss = 0.0
+        train_loss = train_one_epoch()
         logger.info(f"Starting Validation Epoch: {epoch}")
         # valid_loss, em, f1, metric_result, predictions = valid_one_epoch()
         valid_loss, metric_result, _ = valid_one_epoch()

@@ -41,7 +41,7 @@ idx2word_noanswer_path = './data/no_answer/vocab_idx2word.pkl'
 word2idx_path = './data/vocab_word2idx.pkl'
 word2idx_noanswer_path = './data/no_answer/vocab_word2idx.pkl'
 
-wrong_id_path = '。/data/no_answer/wrong_ids.txt'
+references_path = './data/no_answer/references.pkl'
 
 # wandb configuration
 max_len_word = 25
