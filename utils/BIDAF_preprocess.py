@@ -125,11 +125,13 @@ def build_char_vocab(vocab_text):
 
 
 def get_error_indices(df, idx2word):
-    start_value_error, end_value_error, assert_error = test_indices(df, idx2word)
+    start_value_error, end_value_error, assert_error, id_error = test_indices(df, idx2word)
     err_idx = start_value_error + end_value_error + assert_error
+    id_error = set(id_error)
     err_idx = set(err_idx)
+    assert len(err_idx) == len(id_error)
     print(f"Number of error indices: {len(err_idx)}")
-    return err_idx
+    return err_idx, id_error
 
 
 def test_indices(df, idx2word):
@@ -151,6 +153,7 @@ def test_indices(df, idx2word):
     start_value_error = []
     end_value_error = []
     assert_error = []
+    id_error = []
     for index, row in df.iterrows():
 
         answer_tokens = [w.text for w in nlp(row['answer'], disable=['parser', 'tagger', 'ner'])]
@@ -169,18 +172,21 @@ def test_indices(df, idx2word):
         except:
 
             start_value_error.append(index)
+            id_error.append(row['id'])
         try:
             end_idx = ends.index(answer_end)
         except:
             end_value_error.append(index)
+            id_error.append(row['id'])
 
         try:
             assert idx2word[row['context_ids'][start_idx]] == answer_tokens[0]
             assert idx2word[row['context_ids'][end_idx]] == answer_tokens[-1]
         except:
             assert_error.append(index)
+            id_error.append(row['id'])
 
-    return start_value_error, end_value_error, assert_error
+    return start_value_error, end_value_error, assert_error, id_error
 
 
 def index_answer(row, idx2word):
@@ -230,9 +236,12 @@ def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
     df['context_char_ids'] = df.context.apply(text2charids, char2idx=char2idx)
     df['question_char_ids'] = df.question.apply(text2charids, char2idx=char2idx)
 
-    df_error = get_error_indices(df, idx2word)
+    df_error, id_error = get_error_indices(df, idx2word)
     df.drop(df_error, inplace=True)
     df['label_ids'] = df.apply(index_answer, axis=1, idx2word=idx2word)
+    # json.dump(id_error, open('id_error.txt', 'w'))
+    for i in id_error:
+        print(i)
 
     return df
 
@@ -337,7 +346,5 @@ if __name__ == '__main__':
     glove_path = config.glove_path
     glove_dict = load_pretrain_embedding(glove_path)
     embedding_matrix = create_embedding_matrix(word2idx, glove_dict)
-
-
 
 

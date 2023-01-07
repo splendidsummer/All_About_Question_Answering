@@ -51,9 +51,9 @@ if __name__ == '__main__':
     dev_df = preprocess_noanswer_df(dev_df)
 
     #
-    vocab_text = gather_text(train_df, dev_df)
-    word2idx, idx2word, _ = build_word_vocab(vocab_text)
-    char2idx, idx2char, _ = build_char_vocab(vocab_text)
+    # vocab_text = gather_text(train_df, dev_df)
+    # word2idx, idx2word, _ = build_word_vocab(vocab_text)
+    # char2idx, idx2char, _ = build_char_vocab(vocab_text)
     #
     # word2idx_file = config.full_data_dir + 'vocab_word2idx.pkl'
     # idx2word_file = config.full_data_dir + 'vocab_idx2word.pkl'
@@ -71,13 +71,13 @@ if __name__ == '__main__':
     idx2char = pickle.load(open('../data/no_answer/idx2char.pkl', 'rb'))
     char2idx2 = pickle.load(open('../data/char2idx.pkl', 'rb'))
 
-    train_df = postprocess_df(train_df, word2idx, idx2word, char2idx, prex_filename='train')
-    train_df.to_pickle(config.full_data_dir + f'train_df.pkl')
+    # train_df = postprocess_df(train_df, word2idx, idx2word, char2idx, prex_filename='train')
+    # train_df.to_pickle(config.full_data_dir + f'train_df.pkl')
 
     dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx, prex_filename='dev')
     dev_df.to_pickle(config.full_data_dir + f'dev_df.pkl')
 
-    save_noanswer_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
-                           train_df.question_char_ids, train_df.label_ids)
-    save_noanswer_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
-                           dev_df.question_char_ids, dev_df.label_ids, prex='dev')
+    # save_noanswer_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
+    #                        train_df.question_char_ids, train_df.label_ids)
+    # save_noanswer_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
+    #                        dev_df.question_char_ids, dev_df.label_ids, prex='dev')

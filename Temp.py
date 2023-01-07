@@ -97,6 +97,15 @@ if __name__ == '__main__':
     df = pickle.load(open(file_path, 'rb'))
     print(111)
 
+    from transformers import BertModel, BertConfig
+
+    bert_dir = 'hfl/chinese-macbert-base'
+    config = BertConfig.from_pretrained(bert_dir)
+    # 所有层的特征都输出，不加这个就不输出所有层
+    # config.update({'output_hidden_states': True})
+    bert = BertModel.from_pretrained(bert_dir, config=config)
+
+
 
 
 

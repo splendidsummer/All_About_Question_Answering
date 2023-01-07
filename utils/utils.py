@@ -8,6 +8,7 @@ import shutil, wandb, torch, string
 from collections import Counter
 import collections
 from datasets import load_dataset, load_metric
+import config as cfg
 
 
 def load_json(path):
@@ -131,11 +132,28 @@ def epoch_time(start_time, end_time):
     return elapsed_mins, elapsed_secs
 
 
+def pop_wrong_ids(path, references):
+    wrong_ids = []
+    with open(path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        print(len(lines))
+
+        for line in lines:
+            line = line.strip()
+            wrong_ids.append(line)
+            print(line)
+
+    for idn in wrong_ids:
+        references.pop(idn)
+    assert len(references) == (11873-52)
+    return references
+
+
 def evaluate_bert_metric(predictions):
     """
 
     :param predictions:
-    :return:
+    :return: metric from bert evaluation API
         {'exact': 71.58258232965552,
      'f1': 75.0429473498408,
      'total': 11873,
@@ -156,8 +174,9 @@ def evaluate_bert_metric(predictions):
     metric = load_metric("squad_v2")
     predictions = [{"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()]
     references = [{"id": ex["id"], "answers": ex["answers"]} for ex in datasets["validation"]]
-    metric.compute(predictions=predictions, references=references)
-
+    references = pop_wrong_ids(cfg.wrong_id_path, references)
+    metric = metric.compute(predictions=predictions, references=references)
+    return metric
 
 
 def make_qid_to_has_ans(dataset):

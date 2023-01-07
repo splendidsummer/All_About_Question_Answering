@@ -18,6 +18,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 now = datetime.datetime.now()
 now = now.strftime('%Y%m%d%H%M%S')
 model_path = '/root/autodl-tmp/dl_project2/saved_model_' + now + '.pt'
+wrong_id_path = cfg.wrong_id_path
 
 # initialize wandb logging to your project
 wandb.init(
@@ -27,7 +28,7 @@ wandb.init(
     entity=cfg.TEAM_NAME,
     config=cfg.wandb_config,
     # sync_tensorboard=True,
-    name='bidaf debugging',
+    name='bidaf run ' + now,
     # notes='',
     ####
 )
@@ -176,10 +177,11 @@ def valid_one_epoch():
 
         batch_count += 1
 
-    em, f1 = evaluate(predictions)
+    # em, f1 = evaluate(predictions)
     metric_result = evaluate_bert_metric(predictions)
 
-    return valid_loss, em, f1, metric_result, predictions
+    return valid_loss, metric_result, predictions
+    # return valid_loss, em, f1, metric_result, predictions
 
 
 def train():
@@ -197,35 +199,33 @@ def train():
         # train_loss = train_one_epoch()
         train_loss = 0.0
         logger.info(f"Starting Validation Epoch: {epoch}")
-        valid_loss, em, f1, metric_result, predictions = valid_one_epoch()
+        # valid_loss, em, f1, metric_result, predictions = valid_one_epoch()
+        valid_loss, metric_result, _ = valid_one_epoch()
         end_time = time.time()
 
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
 
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
-        ems.append(em)
-        f1s.append(f1)
+        # ems.append(em)
+        # f1s.append(f1)
 
-        wandb.log({'epoch': epoch, 'train_loss': train_loss, 'val_loss': valid_loss, 'exact_match': em, 'f1_score': f1,
-                   'bert_exact': metric_result['exact'], 'bert_f1': metric_result['f1'],
+        wandb.log({'epoch': epoch, 'train_loss': train_loss, 'val_loss': valid_loss,
+                   'exact_match': metric_result['exact'], 'f1': metric_result['f1'],
                    'HasAns_exact': metric_result['HasAns_exact'], 'HasAns_f1': metric_result['HasAns_f1'],
                    'NoAns_exact': metric_result['HasAns_exact'], 'NoAns_f1': metric_result['NoAns_f1'],
                    'best_exact': metric_result['HasAns_exact'], 'best_f1': metric_result['best_f1'] })
 
-        em, f1 = evaluate(predictions)
-
         logger.info(f"Epoch train loss : {train_loss}| Time: {epoch_mins}m {epoch_secs}s")
         logger.info(f"Epoch valid loss: {valid_loss}")
-        logger.info(f"Epoch EM: {em}")
-        logger.info(f"Epoch F1: {f1}")
+
+        logger.info(f"Exact_match': {metric_result['exact']} | 'F1': {metric_result['f1']}")
+        # logger.info()
+
         logger.info("====================================================================================")
 
-    return valid_loss / len(valset), em, f1
-
-
-wandb.save('model.h5')
-torch.save(model, 'model.pth')  # possible to use .h5 file here??
+        wandb.save('model.h5')
+        torch.save(model, 'model.pth')  # possible to use .h5 file here??
 
 
 if __name__ == '__main__':
