@@ -21,17 +21,20 @@ class ModelingLayer(nn.Module):
         return out
 
 
+# BasicAtten
 class BasicAttention(nn.Module):
-    def __init__(self, bert_hidden_size, drop_rate):
+    def __init__(self, bert_hidden_size, proj_size, drop_rate):
         super(BasicAttention, self).__init__()
         self.attention = nn.Linear(bert_hidden_size, 1)
         self.dropout = nn.Dropout(drop_rate)
+        self.proj_ctx = nn.Linear(bert_hidden_size, proj_size)
+        self.proj_ques = nn.Linear(bert_hidden_size, proj_size)
 
     def forward(self, context, context_masks, query, query_masks):
 
         # context.shape == query.shape == [bs, ctx_len/ques_len, bert_hidden_size]
-        context = self.dropout(context)
-        query = self.dropout(query)
+        context = self.proj_ctx(self.dropout(context))
+        query = self.proj_ques(self.dropout(query))
         batch_size, context_len, query_len = context.size(0), context.size(1), query.size(1)
 
         # context_.shape == query_.shape == [bs, ctx_len, ques_len, bert_hidden_size]
@@ -62,25 +65,28 @@ class BasicAttention(nn.Module):
         q2c_sim_mat, _ = torch.max(sim_matrix, dim=-1)
         # beta.shape = [bs, context_len]
         beta = F.softmax(q2c_sim_mat, dim=-1)
-        #  [bs, 1, ctx_len] * [bs, ctx_len]
+        #  [bs, ctx_len] * [bs, ctx_len]
         beta = beta * context_masks.squeeze()
+        # beta.shape = [bs, 1, context_len]
         beta = beta.unsqueeze(1)
 
-        # beta.shape = [bs, 1, context_len]
-        b = torch.bmm(beta, context).repeat(1, context_len, 1)
+        # b.shape == [bs, 1, bert_hidden_size]
+        b = torch.bmm(beta, context)
+        # b.shape == [bs, ctx_len, bert_hidden_size]
+        b = b.repeat(1, context_len, 1)
         c = torch.mul(context, a)
         d = torch.mul(context, b)
+
         global_hidden = torch.concat([context, a, c, d], dim=-1)
 
         return global_hidden
 
 
 class SpanbertAttention(nn.Module):
-    def __init__(self, hidden_size, drop_rate):
+    def __init__(self, bert_hidden_size, proj_size, drop_rate):
         super(SpanbertAttention, self).__init__()
-        self.hidden_size = hidden_size
-        self.attention = nn.Linear(hidden_size, 1)
-        self.dropout = nn.Dropout(drop_rate)
+        self.attention = BasicAttention(bert_hidden_size, proj_size, drop_rate)
+        # self.dropout = nn.Dropout(drop_rate)
 
     def forward(self, inputs, ctx_mask, ques_mask, ctx_indices, ques_indices):
         batch_size, ctx_len, ques_len, hidden_size = \
@@ -93,86 +99,31 @@ class SpanbertAttention(nn.Module):
             ctx_idx = ctx_indices[i]
             ques_idx = ques_indices[i]
             ctx[i][: len(ctx_indices)] = inputs[ctx_idx]
-            ques[i][: len()] = inputs[ques_idx]
+            ques[i][: len(ques_idx)] = inputs[ques_idx]
 
-        return None
+        global_hiddens = self.attention(ctx, ctx_mask, ques, ques_mask)
+        return global_hiddens
 
 
 class SpanBert_BiDAF(BertPreTrainedModel):
-    def __init__(self, bert_hidden_size, attention_hidden_size, lstm_hidden_size,
-                 num_layers, drop_rate):
+    def __init__(self, bert_hidden_size, proj_size, lstm_hidden_size, num_layers, drop_rate):
         super(SpanBert_BiDAF, self).__init__(config=AutoConfig.from_pretrained(cfg.config_path))
         self.spanbert = AutoModel.from_pretrained(cfg.model_checkpoint)
-        self.attention = SpanbertAttention(attention_hidden_size, drop_rate)
-        self.modeling_layer = ModelingLayer(bert_hidden_size, lstm_hidden_size)
+        self.attention = SpanbertAttention(bert_hidden_size, proj_size, drop_rate)
+        self.modeling_layer = ModelingLayer(bert_hidden_size, lstm_hidden_size, drop_rate, num_layers)
         self.dropout = nn.Dropout(drop_rate)
-        self.fc = nn.Linear(lstm_hidden_size*2, 1)
-        self.fc = nn.Linear(bert_hidden_size, 1)
+        self.fc_start = nn.Linear(proj_size * 4, 1)
+        self.fc_end = nn.Linear(proj_size * 4, 1)
 
-    def forward(self, input_ids, attention_mask, start_positions, end_positions, context_indices,
-                ques_indices, ctx_mask, qs_mask):
+    def forward(self, input_ids, attention_mask, ctx_indices, ques_indices, ctx_mask, qs_mask):
 
         outputs = self.spanbert(input_ids, attention_mask=attention_mask)
         output = outputs[0]
-        output = self.attention(output)
-        #
-        out = self.fc(output)
-        out = F.softmax(self.dropout(out))
+        output = self.attention(output, ctx_mask, qs_mask, ctx_indices, ques_indices, ctx_mask, qs_mask)
+        start_out = self.fc_start(output)
+        end_out = self.fc_end(output)
 
-        print(output.shape)
-        print(out.shape)
-
-        return out
-
-class BertNER(BertPreTrainedModel):
-    def __init__(self, config):
-        super(BertNER, self).__init__(config)
-        self.spanbert = AutoModel.from_pretrained("SpanBERT/spanbert-base-cased")
-
-        self.num_labels = config.num_labels
-
-        self.bert = BertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.bilstm = nn.LSTM(
-            input_size=config.lstm_embedding_size,  # 1024
-            hidden_size=config.hidden_size // 2,  # 1024
-            batch_first=True,
-            num_layers=2,
-            dropout=config.lstm_dropout_prob,  # 0.5
-            bidirectional=True
-        )
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.init_weights()
-
-    def forward(self, input_data, token_type_ids=None, attention_mask=None, labels=None,
-                position_ids=None, inputs_embeds=None, head_mask=None):
-        input_ids, input_token_starts = input_data
-        outputs = self.bert(input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            position_ids=position_ids,
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
-        sequence_output = outputs[0]
-
-        # 去除[CLS]标签等位置，获得与label对齐的pre_label表示
-        origin_sequence_output = [layer[starts.nonzero().squeeze(1)]
-                                  for layer, starts in zip(sequence_output, input_token_starts)]
-        # 将sequence_output的pred_label维度padding到最大长度
-        padded_sequence_output = pad_sequence(origin_sequence_output, batch_first=True)
-        # dropout pred_label的一部分feature
-        padded_sequence_output = self.dropout(padded_sequence_output)
-        lstm_output, _ = self.bilstm(padded_sequence_output)
-        # 得到判别值
-        logits = self.classifier(lstm_output)
-        outputs = (logits,)
-        if labels is not None:
-            loss_mask = labels.gt(-1)
-            loss = self.crf(logits, labels, loss_mask) * (-1)
-            outputs = (loss,) + outputs
-
-        # contain: (loss), scores
-        return outputs
+        return start_out, end_out
 
 
 if __name__ == '__main__':

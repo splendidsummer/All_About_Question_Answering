@@ -91,6 +91,7 @@ bert_config = {
     'word_embedding_size': 100,
     'num_epochs': 50,  #
     'batch_size': 32,
+    'proj_size': 100,
     'learning_rate': 0.5,
     'drop_prob': 0.2,
     'bert_hidden_size': 768,
