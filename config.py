@@ -45,6 +45,8 @@ references_path = './data/no_answer/references.pkl'
 
 # wandb configuration
 max_len_word = 25
+char_vocab_size = 204
+
 wandb_config = {
     'word_embedding_size': 100,
     'char_embedding_size': 8,
@@ -53,7 +55,7 @@ wandb_config = {
     'vocab_size': 97110,
     'char_vocab_size': 204,
     'max_len_word': max_len_word,
-    'num_epochs': 30,  #
+    'num_epochs': 50,  #
     'batch_size': 32,
     'learning_rate': 0.5,
     'drop_prob': 0.2,
@@ -75,6 +77,30 @@ wandb_config = {
 # model saving path
 squad_models = "output/" + exp
 
-#  network params
-char_vocab_size = 204
+########################################################
+# Bert BiDAF params setting
+########################################################
+bert_model_file = '../data/models/spanbert/'
+config_path = '../data/models/spanbert/config.json'
+model_checkpoint = "SpanBERT/spanbert-base-cased"
+pad_on_right = True
+max_length = 384  # The maximum length of a feature (question and context)
+doc_stride = 128  # The authorized overlap between two part of the context when splitting it is needed.
+
+bert_config = {
+    'word_embedding_size': 100,
+    'num_epochs': 50,  #
+    'batch_size': 32,
+    'learning_rate': 0.5,
+    'drop_prob': 0.2,
+    'bert_hidden_size': 768,
+    'attention_hidden_size': 768,
+    'lstm_hidden_size': 100,
+    'cuda': True,
+    'pretrained': False,
+    'weight_decay': 0.0001,
+}
+
+
+
 
