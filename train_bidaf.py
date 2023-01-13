@@ -55,12 +55,18 @@ glove_vectors = torch.tensor(glove_vectors, dtype=torch.float32)
 
 with open(cfg.idx2word_noanswer_path, 'rb') as f:
     idx2word = pickle.load(f)
+# with open(cfg.idx2word_path, 'rb') as f:
+#     idx2word = pickle.load(f)
 
 with open(cfg.train_df_noanswer_path, 'rb') as f:
     train_df = pickle.load(f)
+# with open(cfg.train_df_path, 'rb') as f:
+#     train_df = pickle.load(f)
 
 with open(cfg.dev_df_noanswer_path, 'rb') as f:
     dev_df = pickle.load(f)
+# with open(cfg.all_dev_df_path, 'rb') as f:
+#     dev_df = pickle.load(f)
 
 with open(cfg.references_path,  'rb') as f:
     references = pickle.load(f)
@@ -73,8 +79,11 @@ with open(cfg.references_path,  'rb') as f:
 
 # train_data = np.load(config.train_feature_path)
 train_data = np.load(cfg.train_feature_noanswer_path, allow_pickle=True)  # using like a dict
+# train_data = np.load(cfg.train_feature_path, allow_pickle=True)
+
 # dev_data = np.load(config.dev_feature_path)
 dev_data = np.load(cfg.dev_feature_noanswer_path, allow_pickle=True)
+# all_dev_data = np.load(cfg.all_dev_feature_path, allow_pickle=True)
 
 train_data = [i for (_, i) in train_data.items()]
 dev_data = [i for (_, i) in dev_data.items()]
@@ -85,6 +94,7 @@ dev_ids = dev_df.id.values
 logger.info('Building Training & Validation dataset!!')
 trainset = SquadDataset(*train_data, train_ids)
 valset = SquadDataset(*dev_data, dev_ids)
+# valset = SquadValDataset(*all_dev_data,dev_ids)
 
 train_loader = DataLoader(trainset,
                           batch_size=batch_size,
@@ -180,7 +190,11 @@ def valid_one_epoch():
                 else:
                     pred = context[i][s_idx[i]:e_idx[i] + 1]
                     pred = ' '.join([idx2word[idx.item()] for idx in pred])
+                    pred = normalize_answer(pred)
                     predictions[val_id] = pred
+
+            # preds = postprocess_qa_predictions(p1, p2, ids, context, idx2word)
+            # predictions.update(preds)
 
         batch_count += 1
 

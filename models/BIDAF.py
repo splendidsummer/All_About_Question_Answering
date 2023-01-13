@@ -185,10 +185,6 @@ class ModelingLayer(nn.Module):
         return out
 
 
-def super(Output, self):
-    pass
-
-
 class Output(nn.Module):
     def __init__(self, hidden_size):
         super(Output, self).__init__()

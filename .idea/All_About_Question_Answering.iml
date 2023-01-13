@@ -5,4 +5,7 @@
     <orderEntry type="jdk" jdkName="Remote Python 3.8.10 (sftp://root@region-8.seetacloud.com:44098/root/miniconda3/bin/python)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+  <component name="PyDocumentationSettings">
+    <option name="renderExternalDocumentation" value="true" />
+  </component>
 </module>

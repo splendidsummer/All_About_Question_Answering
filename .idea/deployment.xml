@@ -3,13 +3,6 @@
   <component name="PublishConfigData" autoUpload="Always" serverName="root@region-8.seetacloud.com:44098" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
     <option name="confirmBeforeUploading" value="false" />
     <serverData>
-      <paths name="root@region-8.seetacloud.com:14176 password">
-        <serverdata>
-          <mappings>
-            <mapping local="$PROJECT_DIR$" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
       <paths name="root@region-8.seetacloud.com:44098">
         <serverdata>
           <mappings>

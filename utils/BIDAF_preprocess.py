@@ -38,6 +38,47 @@ def parse_data(data: dict) -> list:
     return qa_pair_lst
 
 
+def parse_val_data(data: dict) -> list:
+    """
+    :param data: here the data is read directly from json file
+    :return:
+    """
+    data = data['data']
+    qa_pair_lst = []
+    for element in data:
+        """
+        number of element here == 442, that means we have 442 articles in different fields 
+        """
+        for para in element['paragraphs']:
+            context = para['context']
+            for qa_pair in para['qas']:
+                qa_pair_dict = {}
+                qid = qa_pair['id']
+                # print(qid)
+
+                question = qa_pair['question']
+
+                qa_pair_dict['id'] = qid
+                qa_pair_dict['context'] = context
+                qa_pair_dict['question'] = question
+                qa_pair_lst.append(qa_pair_dict)
+
+    return qa_pair_lst
+
+
+def preprocess_val_df(qa_pair_lst):
+    df = pd.DataFrame(qa_pair_lst)
+
+    def to_lower(text):
+        return text.lower()
+
+    df.context = df.context.apply(to_lower)
+    df.question = df.question.apply(to_lower)
+    # df.answer = df.answer.apply(to_lower)
+
+    return df
+
+
 def preprocess_df(qa_pair_lst):
     df = pd.DataFrame(qa_pair_lst)
 
@@ -55,6 +96,14 @@ def parse_df(path):
     data = load_json(path)
     qa_pair_lst = parse_data(data)
     processed_df = preprocess_df(qa_pair_lst)
+
+    return processed_df
+
+
+def parse_val_df(path):
+    data = load_json(path)
+    qa_pair_lst = parse_val_data(data)
+    processed_df = preprocess_val_df(qa_pair_lst)
 
     return processed_df
 
@@ -94,6 +143,11 @@ def build_word_vocab(text):
     print(f"word2idx-length: {len(word2idx)}")
     idx2word = {v: k for k, v in word2idx.items()}
 
+    word2idx_file = config.data_dir + 'vocab_word2idx.pkl'
+    idx2word_file = config.data_dir + 'vocab_idx2word.pkl'
+    pickle.dump(word2idx, open(word2idx_file, 'wb'))
+    pickle.dump(idx2word, open(idx2word_file, 'wb'))
+
     return word2idx, idx2word, word_vocab
 
 
@@ -115,11 +169,11 @@ def build_char_vocab(vocab_text):
     char2idx = {char: idx for idx, char in enumerate(char_vocab)}
     idx2char = {idx: char for idx, char in enumerate(char_vocab)}
     print(f"char2idx-length: {len(char2idx)}")
+
     char2idx_file = config.data_dir + 'char2idx.pkl'
     idx2char_file = config.data_dir + 'idx2char.pkl'
-
-    # pickle.dump(char2idx, open(char2idx_file, 'wb'))
-    # pickle.dump(idx2char, open(idx2char_file, 'wb'))
+    pickle.dump(char2idx, open(char2idx_file, 'wb'))
+    pickle.dump(idx2char, open(idx2char_file, 'wb'))
 
     return char2idx, idx2char, char_vocab
 
@@ -217,7 +271,7 @@ def index_answer(row, idx2word):
     return [start_idx, end_idx]
 
 
-def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
+def postprocess_df(df, word2idx, idx2word, char2idx):
     def text2ids(text, word2idx):
         words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
         ids = [word2idx.get(w, word2idx['<unk>']) for w in words]
@@ -242,6 +296,26 @@ def postprocess_df(df, word2idx, idx2word, char2idx, prex_filename='train'):
     # json.dump(id_error, open('id_error.txt', 'w'))
     for i in id_error:
         print(i)
+
+    return df
+
+
+def postprocess_val_df(df, word2idx, idx2word, char2idx):
+    def text2ids(text, word2idx):
+        words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
+        ids = [word2idx.get(w, word2idx['<unk>']) for w in words]
+
+        return ids
+
+    def text2charids(text, char2idx):
+        words = [w.text for w in nlp(text, disable=['parser', 'tagger', 'ner'])]
+        ids = [[char2idx.get(c, char2idx['<unk>']) for c in w] for w in words]
+        return ids
+
+    df['context_ids'] = df.context.apply(text2ids, word2idx=word2idx)
+    df['question_ids'] = df.question.apply(text2ids, word2idx=word2idx)
+    df['context_char_ids'] = df.context.apply(text2charids, char2idx=char2idx)
+    df['question_char_ids'] = df.question.apply(text2charids, char2idx=char2idx)
 
     return df
 
@@ -304,47 +378,79 @@ def save_noanswer_features(context_ids, context_char_ids, question_ids, question
                 labels=np.array(labels)
             )
 
-
-# def simplied_build_char_vocab(vocab_text):
-#
-#     chars = []
-#     for sent in vocab_text:
-#         for ch in sent:
-#             chars.append(ch)
-#
-#     char_counter = Counter(chars)
-#     char_vocab = [char for char, count in char_counter.items() if count >= 20]
-#     char_vocab.insert(0, '<unk>')
-#     char_vocab.insert(1, '<pad>')
-#     char2idx = {char: idx for idx, char in enumerate(char_vocab)}
-#     print(f"char2idx-length: {len(char2idx)}")
-#     char2idx_file = './data/char2idx.pkl'
-#
-#     return char2idx, char_vocab
+def save_val_features(context_ids, context_char_ids, question_ids, question_char_ids):
+    np.savez(
+                os.path.join(config.data_dir, f"all_dev_features.npz"),
+                context_ids=np.array(context_ids),
+                context_char_ids=np.array(context_char_ids),
+                question_ids=np.array(question_ids),
+                question_char_ids=np.array(question_char_ids),
+            )
 
 
 if __name__ == '__main__':
-    train_path = config.train_file
-    dev_path = config.dev_file
 
-    train_df = parse_df(train_path)
-    dev_df = parse_df(dev_path)
+    ##########################################################
+    # Using this when producing training and validation data
+    ##########################################################
+    #
+    # train_path = config.train_file
+    # dev_path = config.dev_file
+    # #
+    # train_df = parse_df(train_path)
+    # dev_df = parse_val_df(dev_path)
+    #
+    # vocab_text = gather_text(train_df, dev_df)
+    # #
+    # word2idx, idx2word, _ = build_word_vocab(vocab_text)
+    # char2idx, idx2char, _ = build_char_vocab(vocab_text)
+    # #
+    # train_df = postprocess_df(train_df, word2idx, idx2word, char2idx)
+    # dev_df = postprocess_val_df(dev_df, word2idx, idx2word, char2idx)
+    #
+    # train_df.to_pickle('../data/train_df.pkl')
+    # dev_df.to_pickle('../data/dev_df_all.pkl')
+    #
+    # save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
+    #               train_df.question_char_ids, train_df.label_ids)
+    #
+    # save_val_features(dev_df.context_ids, dev_df.context_char_ids,
+    #                   dev_df.question_ids, dev_df.question_char_ids)
+    #
+    # glove_path = config.glove_path
+    # glove_dict = load_pretrain_embedding(glove_path)
+    # embedding_matrix = create_embedding_matrix(word2idx, glove_dict)
 
-    vocab_text = gather_text(train_df, dev_df)
+    ##########################################################
+    # Only saving features
+    ##########################################################
 
-    word2idx, idx2word, _ = build_word_vocab(vocab_text)
-    char2idx, idx2char, _ = build_char_vocab(vocab_text)
-
-    train_df = postprocess_df(train_df, word2idx, idx2word, char2idx, prex_filename='train')
-    dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx, prex_filename='dev')
+    train_df = pickle.load(open('../data/train_df.pkl', 'rb'))
+    dev_df = pickle.load(open('../data/dev_df_all.pkl', 'rb'))
 
     save_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
                   train_df.question_char_ids, train_df.label_ids)
-    save_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
-                  dev_df.question_char_ids, dev_df.label_ids, prex='dev')
 
-    glove_path = config.glove_path
-    glove_dict = load_pretrain_embedding(glove_path)
-    embedding_matrix = create_embedding_matrix(word2idx, glove_dict)
+    save_val_features(dev_df.context_ids, dev_df.context_char_ids,
+                      dev_df.question_ids, dev_df.question_char_ids)
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
