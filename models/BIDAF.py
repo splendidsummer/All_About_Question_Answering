@@ -149,7 +149,7 @@ class Attention(nn.Module):
         context_masks = context_masks.unsqueeze(-1)
         # question_masks.squeeze(1).shape = [bs, 1, ques_len]
         question_masks = query_masks.unsqueeze(1)
-
+        # We should try using this alpha term with or without masking
         alpha = alpha * context_masks * question_masks
 
         # print('alpha shape before masking', alpha.shape)
@@ -161,6 +161,7 @@ class Attention(nn.Module):
         # beta.shape = [bs, 1, context_len]
         beta = F.softmax(q2c_sim_mat, dim=-1)
         #  [bs, 1, ctx_len] * [bs, 1, ctx_len]
+        # We should try using this beta term with or without masking
         beta = beta * context_masks.squeeze()
         beta = beta.unsqueeze(1)
 
@@ -182,6 +183,10 @@ class ModelingLayer(nn.Module):
     def forward(self, inputs):
         out, _ = self.rnn(inputs)
         return out
+
+
+def super(Output, self):
+    pass
 
 
 class Output(nn.Module):

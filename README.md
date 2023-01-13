@@ -33,3 +33,6 @@ Stanford Question Answering Dataset (SQuAD) is a reading comprehension dataset, 
     Query:  When did Beyonce start becoming popular?
     Answer:  {'text': 'in the late 1990s', 'answer_start': 269}*  
 
+### Modified in 20230113
+#### Adding no answer prediction in prediction of validation set
+#### Adding masking mechanism in prediction of training

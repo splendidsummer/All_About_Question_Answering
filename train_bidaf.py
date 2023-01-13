@@ -174,9 +174,13 @@ def valid_one_epoch():
 
             for i in range(batch_size):
                 val_id = ids[i]
-                pred = context[i][s_idx[i]:e_idx[i] + 1]
-                pred = ' '.join([idx2word[idx.item()] for idx in pred])
-                predictions[val_id] = pred
+                if s_idx[i] == e_idx[i] == 0:
+                    pred = ''
+                    predictions[val_id] = pred
+                else:
+                    pred = context[i][s_idx[i]:e_idx[i] + 1]
+                    pred = ' '.join([idx2word[idx.item()] for idx in pred])
+                    predictions[val_id] = pred
 
         batch_count += 1
 
