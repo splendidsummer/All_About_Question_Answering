@@ -41,7 +41,7 @@ idx2word_noanswer_path = './data/no_answer/vocab_idx2word.pkl'
 word2idx_path = './data/vocab_word2idx.pkl'
 word2idx_noanswer_path = './data/no_answer/vocab_word2idx.pkl'
 
-references_path = './data/no_answer/references.pkl'
+references_path = './data/no_answer/references.pkl'  # this file produced in uitls.utils file
 
 # wandb configuration
 max_len_word = 25
@@ -86,19 +86,18 @@ model_checkpoint = "SpanBERT/spanbert-base-cased"
 pad_on_right = True
 max_length = 384  # The maximum length of a feature (question and context)
 doc_stride = 128  # The authorized overlap between two part of the context when splitting it is needed.
+bert_train_file = './data/Spanbert/trainset.pkl'
+bert_dev_file = './data/Spanbert/valset.pkl'
 
-bert_config = {
-    'word_embedding_size': 100,
+bert_wandb_config = {
     'num_epochs': 50,  #
     'batch_size': 32,
     'proj_size': 100,
-    'learning_rate': 0.5,
+    'learning_rate': 0.001,
     'drop_prob': 0.2,
     'bert_hidden_size': 768,
     'attention_hidden_size': 768,
     'lstm_hidden_size': 100,
-    'cuda': True,
-    'pretrained': False,
     'weight_decay': 0.0001,
 }
 

@@ -13,12 +13,14 @@ import os
 import re
 import string
 import sys
+import matplotlib.pyplot as plt
 
 OPTS = None
 
 from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 
 model = AutoModelForQuestionAnswering
+
 
 def parse_args():
     parser = argparse.ArgumentParser('Official evaluation script for SQuAD version 2.0.')
@@ -41,10 +43,18 @@ def parse_args():
 
 def make_qid_to_has_ans(dataset):
     qid_to_has_ans = {}
-    for article in dataset:
+    for article in dataset['data']:
+        num_noanswer = 0
         for p in article['paragraphs']:
             for qa in p['qas']:
                 qid_to_has_ans[qa['id']] = bool(qa['answers'])
+                # print(qa['answers'])
+                if not qa['answers']:
+                    num_noanswer += 1
+                    print(qa['id'])
+
+    print(num_noanswer)
+
     return qid_to_has_ans
 
 
@@ -310,10 +320,18 @@ def main():
 
 
 if __name__ == '__main__':
-    OPTS = parse_args()
-    if OPTS.out_image_dir:
-        import matplotlib
+    # OPTS = parse_args()
+    # if OPTS.out_image_dir:
+    #     import matplotlib
+    #
+    #     matplotlib.use('Agg')
+    #     import matplotlib.pyplot as plt
+    # main()
 
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-    main()
+    file_path = '../data/dev-v2.0.json'
+    with open(file_path, 'r', encoding='utf-8') as f:
+        dataset = json.load(f)
+        qid_to_has_ans = make_qid_to_has_ans(dataset)
+        print(len(qid_to_has_ans))
+
+
