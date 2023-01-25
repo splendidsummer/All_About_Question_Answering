@@ -6,6 +6,7 @@ import spacy
 from collections import Counter
 import transformers
 from datasets import load_dataset, load_metric
+from utils import pop_wrong_ids
 from datasets import ClassLabel, Sequence
 nlp = spacy.load('en_core_web_sm')
 from BIDAF_preprocess import gather_text, build_word_vocab, build_char_vocab, \
@@ -70,13 +71,20 @@ if __name__ == '__main__':
     idx2char = pickle.load(open('../data/no_answer/idx2char.pkl', 'rb'))
     char2idx2 = pickle.load(open('../data/char2idx.pkl', 'rb'))
 
-    train_df = postprocess_df(train_df, word2idx, idx2word, char2idx, prex_filename='train')
+    train_df = postprocess_df(train_df, word2idx, idx2word, char2idx)
     train_df.to_pickle(config.full_data_dir + f'train_df.pkl')
 
-    dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx, prex_filename='dev')
+    dev_df = postprocess_df(dev_df, word2idx, idx2word, char2idx)
     dev_df.to_pickle(config.full_data_dir + f'dev_df.pkl')
 
     save_noanswer_features(train_df.context_ids, train_df.context_char_ids, train_df.question_ids,
                            train_df.question_char_ids, train_df.label_ids)
     save_noanswer_features(dev_df.context_ids, dev_df.context_char_ids, dev_df.question_ids,
                            dev_df.question_char_ids, dev_df.label_ids, prex='dev')
+
+    wrong_id_path = '../data/no_answer/wrong_ids.txt'
+    datasets = load_dataset("squad_v2")
+    references = [{"id": ex["id"], "answers": ex["answers"]} for ex in datasets["validation"]]
+    references = pop_wrong_ids(wrong_id_path, references)
+
+    pickle.dump(references, open('../data/no_answer/references.pkl', 'wb'))

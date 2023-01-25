@@ -11,7 +11,7 @@ exp = "_" + now
 
 # data directories
 train_file = '../data/train-v2.0.json'
-dev_file = './data/dev-v2.0.json'
+dev_file = '../data/dev-v2.0.json'
 data_dir = "../data/"
 full_data_dir = '../data/no_answer/'
 glove_path = './data/glove.6B.100d.txt'
@@ -28,6 +28,8 @@ char_vocab = './data/char2idx.pkl'
 train_df_path = './data/train_df.pkl'
 train_df_noanswer_path = './data/no_answer/train_df.pkl'
 dev_df_path = './data/dev_df.pkl'
+all_dev_df_path = './data/dev_df_all.pkl'
+
 dev_df_noanswer_path = './data/no_answer/dev_df.pkl'
 
 train_feature_path = './data/train_features.npz'
@@ -35,6 +37,7 @@ train_feature_noanswer_path = './data/no_answer/train_features.npz'
 
 dev_feature_path = './data/dev_features.npz'
 dev_feature_noanswer_path = './data/no_answer/dev_features.npz'
+all_dev_feature_path = './data/all_dev_features.npz'
 
 idx2word_path = './data/vocab_idx2word.pkl'
 idx2word_noanswer_path = './data/no_answer/vocab_idx2word.pkl'

@@ -174,6 +174,64 @@ class Attention(nn.Module):
         return global_hidden
 
 
+class AttentionNoMask(nn.Module):
+    def __init__(self, hidden_size, drop_rate):
+        super(AttentionNoMask, self).__init__()
+        self.attention = nn.Linear(hidden_size*6, 1)
+        self.dropout = nn.Dropout(drop_rate)
+
+    def forward(self, context, context_masks, query, query_masks):
+        context = self.dropout(context)
+        query = self.dropout(query)
+
+        # context_masks = context_masks.squeeze(-1)
+        # question_masks = query_masks.squeeze(1)
+
+        batch_size, context_len, query_len = context.size(0), context.size(1), query.size(1)
+
+        context_ = context.unsqueeze(2).repeat(1, 1, query_len, 1)
+        query_ = query.unsqueeze(1).repeat(1, context_len, 1, 1)
+
+        elementwise_prod = torch.mul(context_, query_)
+
+        # [bs, context_len, query_len, 6*hidden_size]
+        cq = torch.cat([context_, query_, elementwise_prod], dim=-1)
+
+        # sim_matrix.shape = [bs, context_len, query_len]
+        sim_matrix = self.attention(cq).view(-1, context_len, query_len)
+
+        alpha = F.softmax(sim_matrix, dim=-1)
+        # print('alpha shape before masking', alpha.shape)
+
+        # content_masks.squeeze(2).shape = [bs, ctx_len, 1]
+        context_masks = context_masks.unsqueeze(-1)
+        # question_masks.squeeze(1).shape = [bs, 1, ques_len]
+        question_masks = query_masks.unsqueeze(1)
+        # We should try using this alpha term with or without masking
+        alpha = alpha
+
+        # print('alpha shape before masking', alpha.shape)
+
+        # [bs, context_len, query_len] * [bs, query_len, embed_size] ->
+        # [bs, context_len, embed_size]
+        a = torch.bmm(alpha, query)
+        q2c_sim_mat, _ = torch.max(sim_matrix, dim=-1)  # maybe there is a problem??
+        # beta.shape = [bs, 1, context_len]
+        beta = F.softmax(q2c_sim_mat, dim=-1)
+        #  [bs, 1, ctx_len] * [bs, 1, ctx_len]
+        # We should try using this beta term with or without masking
+        beta = beta * context_masks.squeeze()
+        beta = beta.unsqueeze(1)
+
+        # beta.shape = [bs, 1, context_len]
+        b = torch.bmm(beta, context).repeat(1, context_len, 1)
+        c = torch.mul(context, a)
+        d = torch.mul(context, b)
+        global_hidden = torch.concat([context, a, c, d], dim=-1)
+
+        return global_hidden
+
+
 class ModelingLayer(nn.Module):
     def __init__(self, hidden_size, drop_rate):
         super(ModelingLayer, self).__init__()
@@ -183,10 +241,6 @@ class ModelingLayer(nn.Module):
     def forward(self, inputs):
         out, _ = self.rnn(inputs)
         return out
-
-
-def super(Output, self):
-    pass
 
 
 class Output(nn.Module):
@@ -227,7 +281,8 @@ class BiDAF(nn.Module):
         self.context_encoder = Encoder(embed_size, hidden_size, drop_rate)
         self.query_encoder = Encoder(embed_size, hidden_size, drop_rate)
 
-        self.attention = Attention(hidden_size, drop_rate)
+        # self.attention = Attention(hidden_size, drop_rate)
+        self.attention = AttentionNoMask(hidden_size, drop_rate)
 
         self.modeling = ModelingLayer(hidden_size, drop_rate)
 

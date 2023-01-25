@@ -9,6 +9,7 @@ from collections import Counter
 import collections
 from datasets import load_dataset, load_metric
 import config as cfg
+from tqdm.auto import tqdm
 
 
 def load_json(path):
@@ -313,53 +314,59 @@ def evaluate(predictions):
     return exact_match, f1
 
 
-#
-# def find_n_best(output, n_best_size):
-#     start_logits = output.start_logits[0].cpu().numpy()
-#     end_logits = output.end_logits[0].cpu().numpy()
-#     offset_mapping = validation_features[0]["offset_mapping"]
-#     # The first feature comes from the first example. For the more general case, we will need to be match the example_id to
-#     # an example index
-#     context = datasets["validation"][0]["context"]
-#
-#     # Gather the indices the best start/end logits:
-#     start_indexes = np.argsort(start_logits)[-1: -n_best_size - 1: -1].tolist()
-#     end_indexes = np.argsort(end_logits)[-1: -n_best_size - 1: -1].tolist()
-#     valid_answers = []
-#     for start_index in start_indexes:
-#         for end_index in end_indexes:
-#             # Don't consider out-of-scope answers, either because the indices are out of bounds or correspond
-#             # to part of the input_ids that are not in the context.
-#             if (
-#                     start_index >= len(offset_mapping)
-#                     or end_index >= len(offset_mapping)
-#                     or offset_mapping[start_index] is None
-#                     or offset_mapping[end_index] is None
-#             ):
-#                 continue
-#             # Don't consider answers with a length that is either < 0 or > max_answer_length.
-#             if end_index < start_index or end_index - start_index + 1 > max_answer_length:
-#                 continue
-#             if start_index <= end_index:  # We need to refine that test to check the answer is inside the context
-#                 start_char = offset_mapping[start_index][0]
-#                 end_char = offset_mapping[end_index][1]
-#                 valid_answers.append(
-#                     {
-#                         "score": start_logits[start_index] + end_logits[end_index],
-#                         "text": context[start_char: end_char]
-#                     }
-#                 )
-#
-#     valid_answers = sorted(valid_answers, key=lambda x: x["score"], reverse=True)[:n_best_size]
-#     return valid_answers
-#
+def postprocess_qa_predictions(all_start_logits, all_end_logits, ids, context_ids,
+                               idx2word, n_best_size=20, max_answer_length=30):
+    """
+
+    :param examples:
+    :param features:
+    :param raw_predictions:
+    :param n_best_size:
+    :param max_answer_length:
+    :return: the normalized answer !!!!
+
+    procedures:
+    1. get the id of validation example
+    2. predict the n_best_size of predictions
+    3. truncate the answer into max_answer_length
+    """
+    predictions = {}
+
+    for idx, pid in enumerate(ids):
+        valid_answers = []
+        start_logits = all_start_logits[idx]
+        end_logits = all_end_logits[idx]
+        start_indexes = np.argsort(start_logits)[-1: -n_best_size - 1: -1].tolist()
+        end_indexes = np.argsort(end_logits)[-1: -n_best_size - 1: -1].tolist()
+        for start_index in start_indexes:
+            for end_index in end_indexes:
+                # Don't consider answers with a length that is either < 0 or > max_answer_length.
+                if end_index < start_index or end_index - start_index + 1 > max_answer_length:
+                    continue
+
+                valid_tokens = context_ids[idx][start_index: end_index+1]
+                valid_answer = ' '.join([idx2word[idx.item()] for idx in valid_tokens])
+                valid_answer = normalize_answer(valid_answer)
+
+                valid_answers.append(
+                    {
+                        "score": start_logits[start_index] + end_logits[end_index],
+                        "text": valid_answer
+                    }
+                )
+
+                # here to
+
+        if len(valid_answers) > 0:
+            best_answer = sorted(valid_answers, key=lambda x: x["score"], reverse=True)[0]
+        else:
+            # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
+            # failure.
+            best_answer = {"text": "", "score": 0.0}
+
+        answer = best_answer["text"]
+        predictions[pid] = answer
+
 
 if __name__ == '__main__':
-    wrong_id_path = '../data/no_answer/wrong_ids.txt'
-    datasets = load_dataset("squad_v2")
-    references = [{"id": ex["id"], "answers": ex["answers"]} for ex in datasets["validation"]]
-    references = pop_wrong_ids(wrong_id_path, references)
-
-    pickle.dump(references, open('../data/no_answer/references.pkl', 'wb'))
-
     print(111)
