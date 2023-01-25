@@ -3,10 +3,17 @@
   <component name="PublishConfigData" autoUpload="Always" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
     <option name="confirmBeforeUploading" value="false" />
     <serverData>
+<<<<<<< HEAD
       <paths name="root@region-8.seetacloud.com:34076">
         <serverdata>
           <mappings>
             <mapping local="$PROJECT_DIR$" web="/" />
+=======
+      <paths name="root@region-8.seetacloud.com:44098">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/root/autodl-tmp/All_About_Question_Answering" local="$PROJECT_DIR$" />
+>>>>>>> bb127722e8255c4e192017195ec88fe3917d3cac
           </mappings>
         </serverdata>
       </paths>
